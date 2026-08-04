@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Падающие ноты">
+<title>Падающие ноты — тренажёр по MIDI</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#0F1420">
+<style>
+  /* Шрифты только системные: файл должен работать без интернета.
+     На iPadOS -apple-system = San Francisco, кириллица полная. */
+  :root {
+    --bg-void: #0F1420;
+    --bg-panel: #1B2436;
+    --bg-panel-2: #222D42;
+    --bg-panel-3: #2A3550;
+    --ivory: #EDE6D6;
+    --ivory-dim: #B8B2A3;
+    --ebony: #0A0B0E;
+    --gold: #C9A15C;
+    --gold-bright: #E8C583;
+    --silver-blue: #7FA8C9;
+    --silver-blue-bright: #A8CBE8;
+    --text-muted: #8791A8;
+    --border: #2A3550;
+    --font-display: ui-serif, Georgia, 'Times New Roman', serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+  }
+
+  * { box-sizing: border-box; }
+
+  /* ВАЖНО: атрибут hidden должен побеждать классы с display.
+     Без этого .empty-state и .error-state рисовались одновременно
+     и тексты накладывались друг на друга. */
+  [hidden] { display: none !important; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg-void);
+    color: var(--ivory);
+    font-family: var(--font-body);
+    overflow: hidden;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    padding-top: var(--safe-t);
+    padding-left: var(--safe-l);
+    padding-right: var(--safe-r);
+    padding-bottom: var(--safe-b);
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 20px;
+    background: linear-gradient(180deg, var(--bg-panel) 0%, var(--bg-void) 100%);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .title-block {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .title {
+    font-family: var(--font-display);
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    color: var(--ivory);
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .file-name {
+    font-size: 13px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 40vw;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Все кнопки — не меньше 44px по высоте: палец, не мышь */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 9px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    transition: background 0.15s ease, transform 0.08s ease, color 0.15s ease;
+    touch-action: manipulation;
+  }
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary { background: var(--gold); color: #1a1408; border-color: var(--gold); }
+  .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-muted); font-weight: 500; }
+  .btn-ghost.is-on { color: var(--ivory); border-color: var(--gold); background: rgba(201,161,92,0.12); }
+
+  @media (hover: hover) {
+    .btn-primary:hover { background: var(--gold-bright); }
+    .btn-ghost:hover { color: var(--ivory); border-color: var(--text-muted); }
+  }
+
+  .stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    background: var(--bg-void);
+  }
+
+  #rollCanvas { display: block; width: 100%; height: 100%; }
+
+  .stage.dragging::after {
+    content: 'Отпустите, чтобы загрузить MIDI';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(201, 161, 92, 0.12);
+    border: 2px dashed var(--gold);
+    color: var(--gold-bright);
+    font-family: var(--font-display);
+    font-size: 20px;
+    pointer-events: none;
+    z-index: 5;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    gap: 14px;
+    pointer-events: none;
+  }
+  .overlay h2 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ivory-dim);
+    margin: 0;
+    max-width: 460px;
+  }
+  .overlay p {
+    color: var(--text-muted);
+    font-size: 13.5px;
+    max-width: 420px;
+    line-height: 1.6;
+    margin: 0;
+  }
+  #errorState h2 { color: var(--silver-blue-bright); }
+  /* оверлей не ловит нажатия целиком, но кнопка внутри — должна */
+  .overlay .btn { pointer-events: auto; margin-top: 4px; }
+
+  /* ---- Панель «Руки» ---- */
+  .hands-panel {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: min(360px, calc(100% - 28px));
+    max-height: calc(100% - 28px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: rgba(27, 36, 54, 0.97);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    z-index: 8;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .hands-title {
+    font-size: 12px;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 4px;
+  }
+  .hands-hint {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0 0 12px;
+  }
+  .hand-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+  }
+  .hand-info { min-width: 0; }
+  .hand-name {
+    display: block;
+    font-size: 13px;
+    color: var(--ivory);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .hand-meta {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .hand-toggle { display: flex; gap: 0; flex-shrink: 0; }
+  .hand-toggle button {
+    min-height: 40px;
+    padding: 0 13px;
+    font-size: 13px;
+    font-family: var(--font-body);
+    background: var(--bg-panel-2);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .hand-toggle button:first-child { border-radius: 9px 0 0 9px; }
+  .hand-toggle button:last-child { border-radius: 0 9px 9px 0; border-left: none; }
+  .hand-toggle button.on[data-hand="right"] { background: var(--gold); color: #1a1408; border-color: var(--gold); font-weight: 600; }
+  .hand-toggle button.on[data-hand="left"] { background: var(--silver-blue); color: #0a1420; border-color: var(--silver-blue); font-weight: 600; }
+
+  .split-row { padding-top: 10px; border-top: 1px solid var(--border); }
+  .split-row label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+  .split-row input[type="range"] { width: 100%; }
+
+  /* ---- Транспорт ---- */
+  .transport {
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    padding: 10px 20px 12px;
+    flex-shrink: 0;
+  }
+  .transport-row { display: flex; align-items: center; gap: 14px; }
+  .transport-row + .transport-row { margin-top: 10px; }
+  .transport-row-secondary { flex-wrap: wrap; row-gap: 10px; }
+
+  .icon-btn {
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border);
+    color: var(--ivory);
+    width: 46px;
+    height: 46px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    touch-action: manipulation;
+    transition: background 0.15s ease, transform 0.08s ease;
+  }
+  .icon-btn:active { transform: scale(0.94); }
+  .icon-btn svg { display: block; }
+  .play-btn {
+    background: var(--gold);
+    color: #1a1408;
+    border-color: var(--gold);
+    width: 52px;
+    height: 52px;
+    font-size: 18px;
+  }
+  @media (hover: hover) {
+    .icon-btn:hover { background: var(--bg-panel-3); border-color: var(--text-muted); }
+    .play-btn:hover { background: var(--gold-bright); }
+  }
+
+  .time-display {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ivory-dim);
+    white-space: nowrap;
+    min-width: 108px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Ползунки: крупный «бегунок», иначе пальцем не поймать */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 26px;
+    background: transparent;
+    outline: none;
+    cursor: pointer;
+    touch-action: none;
+    margin: 0;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--bg-panel-3);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--ivory);
+    border: 2px solid var(--gold);
+    margin-top: -8.5px;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--bg-panel-3);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--ivory);
+    border: 2px solid var(--gold);
+  }
+  .seek-bar { flex: 1; min-width: 60px; }
+
+  .control-group { display: flex; align-items: center; gap: 10px; }
+  .control-group label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .control-group input[type="range"] { width: 120px; }
+  .control-group .value-readout {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ivory-dim);
+    min-width: 38px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .credit {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.75;
+    white-space: nowrap;
+  }
+  .credit a { color: inherit; }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Файловый input не прячем через display:none — в Safari это ломает
+     открытие выбора файлов. Убираем с глаз, оставляя в потоке. */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+    opacity: 0;
+  }
+
+  button, input { font-family: inherit; }
+  *:focus-visible { outline: 2px solid var(--silver-blue-bright); outline-offset: 2px; }
+
+  @media (max-width: 700px) {
+    .file-name { display: none; }
+    .legend { display: none; }
+    .credit { display: none; }
+    .title { font-size: 18px; }
+    .control-group input[type="range"] { width: 84px; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="title-block">
+        <h1 class="title">Падающие ноты</h1>
+        <span class="file-name" id="fileName"></span>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost" id="handsBtn" type="button" hidden>Руки</button>
+        <button class="btn btn-ghost" id="clearBtn" type="button" hidden>Очистить</button>
+        <button class="btn btn-primary" id="uploadBtn" type="button">Загрузить MIDI</button>
+      </div>
+    </header>
+
+    <main class="stage" id="stage">
+      <canvas id="rollCanvas"></canvas>
+
+      <div class="overlay" id="emptyState">
+        <h2>Загрузите MIDI-файл, чтобы начать</h2>
+        <p>Ноты полетят вниз к клавиатуре — играйте, когда они долетают до светлой линии. Подойдёт любой файл .mid или .midi; на компьютере можно перетащить его прямо сюда.</p>
+        <button class="btn btn-primary" id="builtInBtn" type="button">Открыть «Лунную сонату»</button>
+      </div>
+
+      <div class="overlay" id="errorState" hidden>
+        <h2>Не получилось прочитать файл</h2>
+        <p id="errorText"></p>
+        <button class="btn btn-primary" id="builtInBtn2" type="button">Открыть «Лунную сонату»</button>
+      </div>
+
+      <section class="hands-panel" id="handsPanel" hidden>
+        <p class="hands-title">Руки</p>
+        <p class="hands-hint" id="handsHint"></p>
+        <div id="handsRows"></div>
+      </section>
+    </main>
+
+    <footer class="transport" id="transport" hidden>
+      <div class="transport-row">
+        <button class="icon-btn" id="restartBtn" type="button" title="В начало" aria-label="В начало"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M7 5h2.2v14H7zm3.4 7L19 5.4v13.2z"/></svg></button>
+        <button class="icon-btn play-btn" id="playBtn" type="button" title="Играть / пауза" aria-label="Играть или пауза"></button>
+        <span class="time-display" id="timeDisplay">0:00 / 0:00</span>
+        <input type="range" class="seek-bar" id="seekBar" min="0" max="1000" value="0" step="1" aria-label="Перемотка">
+      </div>
+      <div class="transport-row transport-row-secondary">
+        <div class="control-group">
+          <label for="speedSlider">Скорость</label>
+          <input type="range" id="speedSlider" min="25" max="150" value="100" step="5">
+          <span class="value-readout" id="speedLabel">100%</span>
+        </div>
+        <div class="control-group">
+          <label for="volumeSlider">Громкость</label>
+          <input type="range" id="volumeSlider" min="0" max="100" value="70" step="5">
+        </div>
+        <span class="credit" id="credit" hidden></span>
+        <div class="legend" id="legend"></div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- accept намеренно не задан: в Safari на iPad фильтр по расширению
+       .mid делает файлы невыбираемыми и выбор молча ничего не даёт.
+       Тип проверяем сами — по заголовку MThd внутри файла. -->
+  <input type="file" id="fileInput" class="visually-hidden">
+
+<script>
+'use strict';
+
+/* =========================================================
+   DOM
+   ========================================================= */
+var canvas = document.getElementById('rollCanvas');
+var ctx = canvas.getContext('2d');
+var stage = document.getElementById('stage');
+var emptyState = document.getElementById('emptyState');
+var errorState = document.getElementById('errorState');
+var errorText = document.getElementById('errorText');
+var transport = document.getElementById('transport');
+var fileInput = document.getElementById('fileInput');
+var uploadBtn = document.getElementById('uploadBtn');
+var fileNameEl = document.getElementById('fileName');
+var clearBtn = document.getElementById('clearBtn');
+var builtInBtn = document.getElementById('builtInBtn');
+var handsBtn = document.getElementById('handsBtn');
+var handsPanel = document.getElementById('handsPanel');
+var handsRows = document.getElementById('handsRows');
+var handsHint = document.getElementById('handsHint');
+var playBtn = document.getElementById('playBtn');
+var restartBtn = document.getElementById('restartBtn');
+var timeDisplay = document.getElementById('timeDisplay');
+var seekBar = document.getElementById('seekBar');
+var speedSlider = document.getElementById('speedSlider');
+var speedLabel = document.getElementById('speedLabel');
+var volumeSlider = document.getElementById('volumeSlider');
+var legendEl = document.getElementById('legend');
+var creditEl = document.getElementById('credit');
+
+var ICON_PLAY = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 5.2 19 12 8 18.8z"/></svg>';
+var ICON_PAUSE = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7 5h3.4v14H7zm6.6 0H17v14h-3.4z"/></svg>';
+function setPlayIcon(playing) { playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY; }
+
+/* =========================================================
+   Цвета (дублируют CSS-переменные — canvas не умеет var())
+   ========================================================= */
+var COLORS = {
+  ivory: '#EDE6D6',
+  ebony: '#0A0B0E',
+  gold: '#C9A15C',
+  goldBright: '#E8C583',
+  silverBlue: '#7FA8C9',
+  silverBlueBright: '#A8CBE8'
+};
+var HAND_COLORS = {
+  right: { base: COLORS.gold, bright: COLORS.goldBright },
+  left: { base: COLORS.silverBlue, bright: COLORS.silverBlueBright }
+};
+
+var STORE_KEY = 'falling-notes:v2';
+
+/* Встроенная пьеса: Бетховен, Соната №14, 1 часть.
+   Источник: piano-midi.de, Бернд Крюгер, лицензия CC BY-SA.
+   Руки в файле разделены по трекам — программа берёт их оттуда. */
+var BUILT_IN_NAME = 'Лунная соната';
+var BUILT_IN_B64 = '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';
+
+/* =========================================================
+   Состояние приложения
+   ========================================================= */
+var state = {
+  notes: [],
+  tracks: [],          // сводка по нотным трекам: {index, name, count, minPitch, maxPitch, avgPitch}
+  handByTrack: {},     // индекс трека -> 'right' | 'left'
+  splitPitch: 60,      // порог для файлов с единственным треком
+  singleTrack: false,
+  fileName: '',
+  fileBase64: '',
+  totalDuration: 0,
+  minPitch: 60,
+  maxPitch: 72,
+  isPlaying: false,
+  startTimestamp: 0,
+  startOffset: 0,
+  currentTimeCache: 0,
+  speed: 1,
+  volume: 0.7,
+  nextTriggerIdx: 0,
+  fileLoaded: false,
+  loopToken: 0        // чтобы пауза-и-старт внутри одного кадра не плодили циклы
+};
+var seekDragging = false;
+var seekResumeAfter = false;
+var audioCtx = null;
+var masterGain = null;
+
+/* =========================================================
+   1. MIDI-парсер (проверен отдельно в Node, сверен с mido)
+   ========================================================= */
+function parseMidi(arrayBuffer) {
+  var data = new Uint8Array(arrayBuffer);
+  var pos = 0;
+
+  function readUint32() {
+    var v = (data[pos] << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3];
+    pos += 4;
+    return v >>> 0;
+  }
+  function readUint16() {
+    var v = (data[pos] << 8) | data[pos + 1];
+    pos += 2;
+    return v;
+  }
+  function readUint8() {
+    return data[pos++];
+  }
+  function readString(len) {
+    var s = '';
+    for (var i = 0; i < len; i++) s += String.fromCharCode(data[pos++]);
+    return s;
+  }
+  function readVLQ() {
+    var value = 0;
+    var byte;
+    do {
+      byte = data[pos++];
+      value = (value << 7) | (byte & 0x7f);
+    } while (byte & 0x80);
+    return value >>> 0;
+  }
+
+  var headerId = readString(4);
+  if (headerId !== 'MThd') {
+    throw new Error('Это не MIDI-файл: внутри нет заголовка MThd. Проверьте, что выбран файл .mid или .midi, а не архив или ярлык.');
+  }
+  var headerLen = readUint32();
+  var format = readUint16();
+  var numTracksDeclared = readUint16();
+  var division = readUint16();
+  if (division === 0) {
+    throw new Error('В заголовке указано нулевое деление времени — такой MIDI прочитать нельзя.');
+  }
+  if (division & 0x8000) {
+    throw new Error('SMPTE-деление времени не поддерживается — нужен обычный MIDI с тиками на четверть.');
+  }
+  pos += Math.max(0, headerLen - 6);
+
+  var tracks = [];
+  for (var t = 0; t < numTracksDeclared; t++) {
+    if (pos + 8 > data.length) break;
+    var trackId = readString(4);
+    if (trackId !== 'MTrk') {
+      if (pos + 4 > data.length) break;
+      var skipLen = readUint32();
+      pos += skipLen;
+      continue;
+    }
+    var trackLen = readUint32();
+    var trackEnd = Math.min(pos + trackLen, data.length);
+    var events = [];
+    var absTick = 0;
+    var runningStatus = null;
+    while (pos < trackEnd) {
+      var delta = readVLQ();
+      absTick += delta;
+      var statusByte = data[pos];
+      if (statusByte & 0x80) {
+        pos++;
+        if (statusByte < 0xf0) runningStatus = statusByte;
+      } else {
+        statusByte = runningStatus;
+      }
+      if (statusByte === 0xff) {
+        var metaType = readUint8();
+        var mlen = readVLQ();
+        var metaData = data.slice(pos, pos + mlen);
+        pos += mlen;
+        events.push({ tick: absTick, type: 'meta', metaType: metaType, data: metaData });
+      } else if (statusByte === 0xf0 || statusByte === 0xf7) {
+        var slen = readVLQ();
+        pos += slen;
+      } else if (statusByte == null) {
+        break;
+      } else {
+        var eventType = statusByte & 0xf0;
+        var channel = statusByte & 0x0f;
+        if (eventType === 0xc0 || eventType === 0xd0) {
+          var d1 = readUint8();
+          events.push({ tick: absTick, type: 'channel', eventType: eventType, channel: channel, data: [d1] });
+        } else {
+          var e1 = readUint8();
+          var e2 = readUint8();
+          events.push({ tick: absTick, type: 'channel', eventType: eventType, channel: channel, data: [e1, e2] });
+        }
+      }
+    }
+    pos = trackEnd;
+    tracks.push(events);
+  }
+
+  if (tracks.length === 0) {
+    throw new Error('В файле не нашлось ни одного трека (MTrk). Возможно, файл повреждён.');
+  }
+  return { format: format, numTracks: tracks.length, division: division, tracks: tracks };
+}
+
+/* Имя трека может быть в UTF-8 (кириллица) — декодируем правильно,
+   со старым запасным вариантом там, где TextDecoder недоступен. */
+function decodeMetaText(bytes) {
+  var s = '';
+  if (typeof TextDecoder !== 'undefined') {
+    // fatal:true обязателен: обычный декодер не падает, а молча ставит «кракозябры»,
+    // и запасной путь не сработал бы никогда
+    try { s = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (e) { s = ''; }
+    if (!s) { try { s = new TextDecoder('windows-1251').decode(bytes); } catch (e) { s = ''; } }
+  }
+  if (!s) {
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  }
+  // Нулевые байты и управляющие символы вон, пробелы внутри имени оставляем
+  return s.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+}
+
+function buildNotesFromMidi(parsed) {
+  var division = parsed.division;
+  var tracks = parsed.tracks;
+
+  var tempoEvents = [];
+  tracks.forEach(function (events) {
+    events.forEach(function (e) {
+      if (e.type === 'meta' && e.metaType === 0x51 && e.data.length >= 3) {
+        var d = e.data;
+        var usPerQuarter = (d[0] << 16) | (d[1] << 8) | d[2];
+        tempoEvents.push({ tick: e.tick, usPerQuarter: usPerQuarter });
+      }
+    });
+  });
+  if (tempoEvents.length === 0) {
+    tempoEvents.push({ tick: 0, usPerQuarter: 500000 });
+  }
+  tempoEvents.sort(function (a, b) { return a.tick - b.tick; });
+  if (tempoEvents[0].tick !== 0) {
+    tempoEvents.unshift({ tick: 0, usPerQuarter: 500000 });
+  }
+  for (var i = 0; i < tempoEvents.length; i++) {
+    if (i === 0) {
+      tempoEvents[i].startSeconds = 0;
+    } else {
+      var prev = tempoEvents[i - 1];
+      var deltaTicks = tempoEvents[i].tick - prev.tick;
+      var deltaSeconds = (deltaTicks / division) * (prev.usPerQuarter / 1e6);
+      tempoEvents[i].startSeconds = prev.startSeconds + deltaSeconds;
+    }
+  }
+
+  function tickToSeconds(tick) {
+    var idx = 0;
+    for (var i = 0; i < tempoEvents.length; i++) {
+      if (tempoEvents[i].tick <= tick) idx = i;
+      else break;
+    }
+    var te = tempoEvents[idx];
+    var dt = tick - te.tick;
+    return te.startSeconds + (dt / division) * (te.usPerQuarter / 1e6);
+  }
+
+  var notes = [];
+  var trackNames = [];
+  tracks.forEach(function (events, trackIndex) {
+    var active = {};
+    var name = null;
+    var lastTick = 0;
+
+    events.forEach(function (e) {
+      if (e.tick > lastTick) lastTick = e.tick;
+      if (e.type === 'meta' && e.metaType === 0x03 && name === null) {
+        name = decodeMetaText(e.data);
+      }
+      if (e.type !== 'channel') return;
+      var et = e.eventType;
+      if (et !== 0x90 && et !== 0x80) return;
+
+      var pitch = e.data[0];
+      var velocity = e.data[1];
+      var key = e.channel * 128 + pitch;
+
+      if (et === 0x90 && velocity > 0) {
+        // Повторный note-on без note-off — закрываем предыдущую ноту здесь же
+        if (active[key]) closeNote(key, e.tick);
+        active[key] = { startTick: e.tick, velocity: velocity, channel: e.channel };
+      } else if (active[key]) {
+        closeNote(key, e.tick);
+      }
+    });
+
+    // Ноты, оставшиеся без note-off, закрываем концом трека — иначе они пропадут
+    Object.keys(active).forEach(function (key) { closeNote(Number(key), lastTick); });
+
+    function closeNote(key, endTick) {
+      var on = active[key];
+      if (!on) return;
+      var startTime = tickToSeconds(on.startTick);
+      var endTime = tickToSeconds(endTick);
+      if (endTime <= startTime) endTime = startTime + 0.05;
+      notes.push({
+        pitch: key % 128,
+        channel: on.channel,
+        track: trackIndex,
+        velocity: on.velocity,
+        startTime: startTime,
+        endTime: endTime
+      });
+      delete active[key];
+    }
+
+    trackNames.push(name);
+  });
+
+  notes.sort(function (a, b) { return a.startTime - b.startTime; });
+  var totalDuration = notes.reduce(function (max, n) { return Math.max(max, n.endTime); }, 0);
+  return { notes: notes, trackNames: trackNames, totalDuration: totalDuration };
+}
+
+/* =========================================================
+   2. Разделение на руки
+   =========================================================
+   Порядок решений:
+   1) имена треков говорят прямо (right/left, rechts/links, правая/левая...)
+   2) ровно два нотных трека — ниже по средней высоте считаем левой
+   3) три и больше без имён — делим треки на две группы по средней высоте
+   4) один трек — делим по высоте ноты относительно порога
+   ========================================================= */
+// Короткие сокращения (r.h., l.h.) требуют границы с обеих сторон,
+// иначе «Rhodes» превратится в правую руку, а «Flute» — в левую.
+var RIGHT_WORDS = /(^|[^a-zа-яё])(right|rechte|rechts|droite|derecha|destra|treble|melod|прав)|(^|[^a-zа-яё])r\.?h\.?([^a-zа-яё]|$)/i;
+var LEFT_WORDS  = /(^|[^a-zа-яё])(left|linke|links|gauche|izquierda|sinistra|лев)|(^|[^a-zа-яё])(l\.?h\.?|bass|бас)([^a-zа-яё]|$)/i;
+
+var NOTE_NAMES = ['До', 'До#', 'Ре', 'Ре#', 'Ми', 'Фа', 'Фа#', 'Соль', 'Соль#', 'Ля', 'Ля#', 'Си'];
+function plural(n, one, few, many) {
+  var a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b > 1 && b < 5) return few;
+  if (b === 1) return one;
+  return many;
+}
+
+function noteLabel(pitch) {
+  return NOTE_NAMES[((pitch % 12) + 12) % 12] + (Math.floor(pitch / 12) - 1);
+}
+
+function summariseTracks(notes, trackNames) {
+  var byTrack = {};
+  notes.forEach(function (n) {
+    var t = byTrack[n.track];
+    if (!t) {
+      t = byTrack[n.track] = { index: n.track, name: trackNames[n.track] || '', count: 0, sum: 0, minPitch: 127, maxPitch: 0 };
+    }
+    t.count++;
+    t.sum += n.pitch;
+    if (n.pitch < t.minPitch) t.minPitch = n.pitch;
+    if (n.pitch > t.maxPitch) t.maxPitch = n.pitch;
+  });
+  return Object.keys(byTrack).map(function (k) {
+    var t = byTrack[k];
+    t.avgPitch = t.sum / t.count;
+    return t;
+  }).sort(function (a, b) { return a.index - b.index; });
+}
+
+function autoAssignHands(tracks) {
+  var map = {};
+  if (tracks.length === 0) return { map: map, reason: 'нет нот' };
+
+  if (tracks.length === 1) {
+    return { map: map, reason: 'один трек' };
+  }
+
+  // 1. По именам
+  var named = 0;
+  tracks.forEach(function (t) {
+    var nm = t.name || '';
+    var isRight = RIGHT_WORDS.test(nm);
+    var isLeft = LEFT_WORDS.test(nm);
+    if (isRight && !isLeft) { map[t.index] = 'right'; named++; }
+    else if (isLeft && !isRight) { map[t.index] = 'left'; named++; }
+  });
+  var hasRight = tracks.some(function (t) { return map[t.index] === 'right'; });
+  var hasLeft = tracks.some(function (t) { return map[t.index] === 'left'; });
+
+  if (named > 0 && hasRight && hasLeft) {
+    // Безымянные треки — к ближней руке по средней высоте
+    var rightAvg = avgOf(tracks, map, 'right');
+    var leftAvg = avgOf(tracks, map, 'left');
+    tracks.forEach(function (t) {
+      if (!map[t.index]) {
+        map[t.index] = Math.abs(t.avgPitch - rightAvg) <= Math.abs(t.avgPitch - leftAvg) ? 'right' : 'left';
+      }
+    });
+    return { map: map, reason: 'по именам треков' };
+  }
+
+  // Названа только одна рука. Доверяем этому лишь если названное — весомая
+  // часть пьесы: в оркестровом файле «Double bass» и «Bass Trombone» тоже
+  // ловятся как «левая», но это 7% нот и никакой руки не означает.
+  if (named > 0) {
+    var totalNotes = 0, namedNotes = 0;
+    tracks.forEach(function (t) {
+      totalNotes += t.count;
+      if (map[t.index]) namedNotes += t.count;
+    });
+    if (namedNotes >= totalNotes * 0.25) {
+      var knownHand = hasRight ? 'right' : 'left';
+      var otherHand = hasRight ? 'left' : 'right';
+      var knownAvg = avgOf(tracks, map, knownHand);
+      tracks.forEach(function (t) {
+        if (map[t.index]) return;
+        var higher = t.avgPitch >= knownAvg;
+        map[t.index] = (higher === (knownHand === 'right')) ? knownHand : otherHand;
+      });
+      // Если в итоге всё оказалось одной рукой — это не разделение, а покраска
+      // в один цвет. Такой ответ хуже честной догадки по высоте.
+      var bothHands = tracks.some(function (t) { return map[t.index] === 'right'; }) &&
+                      tracks.some(function (t) { return map[t.index] === 'left'; });
+      if (bothHands) {
+        return { map: map, reason: 'по имени трека «' + (hasRight ? 'правая' : 'левая') + '» и высоте остальных' };
+      }
+    }
+  }
+
+  // 2-3. По средней высоте: половина треков сверху — правая, снизу — левая.
+  //      Порядок треков в файле НЕ используем: он ничего не гарантирует.
+  map = {};
+  var sorted = tracks.slice().sort(function (a, b) { return b.avgPitch - a.avgPitch; });
+  var cut = Math.ceil(sorted.length / 2);
+  sorted.forEach(function (t, i) { map[t.index] = i < cut ? 'right' : 'left'; });
+  return { map: map, reason: 'по средней высоте треков' };
+}
+
+function avgOf(tracks, map, hand) {
+  var sum = 0, n = 0;
+  tracks.forEach(function (t) {
+    if (map[t.index] === hand) { sum += t.avgPitch * t.count; n += t.count; }
+  });
+  return n ? sum / n : 60;
+}
+
+function handOfNote(n) {
+  if (state.singleTrack) return n.pitch >= state.splitPitch ? 'right' : 'left';
+  return state.handByTrack[n.track] === 'left' ? 'left' : 'right';
+}
+
+/* =========================================================
+   3. Раскладка клавиатуры
+   ========================================================= */
+function isBlackKeyPitch(n) {
+  var pc = ((n % 12) + 12) % 12;
+  return pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10;
+}
+
+function computeKeyLayout(minNote, maxNote, widthPx) {
+  var whiteNotes = [];
+  for (var n = minNote; n <= maxNote; n++) {
+    if (!isBlackKeyPitch(n)) whiteNotes.push(n);
+  }
+  var whiteCount = Math.max(1, whiteNotes.length);
+  var whiteW = widthPx / whiteCount;
+  var blackW = whiteW * 0.62;
+  var layout = {};
+  whiteNotes.forEach(function (note, i) {
+    layout[note] = { x: i * whiteW, width: whiteW, isBlack: false, isC: (note % 12 === 0) };
+  });
+  for (var m = minNote; m <= maxNote; m++) {
+    if (isBlackKeyPitch(m)) {
+      var whiteCountBefore = 0;
+      for (var k = minNote; k < m; k++) {
+        if (!isBlackKeyPitch(k)) whiteCountBefore++;
+      }
+      layout[m] = { x: whiteCountBefore * whiteW - blackW / 2, width: blackW, isBlack: true, isC: false };
+    }
+  }
+  return { layout: layout, whiteW: whiteW, blackW: blackW, whiteCount: whiteCount };
+}
+
+function paddedRange(minPitch, maxPitch) {
+  var lo = minPitch - 2;
+  var hi = maxPitch + 2;
+  while (isBlackKeyPitch(lo)) lo--;
+  while (isBlackKeyPitch(hi)) hi++;
+  lo = Math.max(21, lo);
+  hi = Math.min(108, hi);
+  while (isBlackKeyPitch(lo)) lo++;
+  while (isBlackKeyPitch(hi)) hi--;
+  if (hi - lo < 12) hi = Math.min(108, lo + 12);
+  return [lo, hi];
+}
+
+/* =========================================================
+   4. Отрисовка
+   ========================================================= */
+function roundRectPath(c, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  c.beginPath();
+  if (c.roundRect) {
+    c.roundRect(x, y, w, h, r);
+  } else {
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+}
+
+function drawNoteBar(c, x, width, top, bottom, colorHex, isActive) {
+  var h = bottom - top;
+  if (h <= 0 || width <= 0) return;
+  var grad = c.createLinearGradient(0, top, 0, bottom);
+  grad.addColorStop(0, colorHex + '30');
+  grad.addColorStop(1, colorHex + 'F0');
+  c.fillStyle = grad;
+  roundRectPath(c, x, top, width, h, Math.min(5, width * 0.3));
+  c.fill();
+  if (isActive) {
+    c.save();
+    c.shadowColor = colorHex;
+    c.shadowBlur = 16;
+    c.fill();
+    c.restore();
+  }
+}
+
+function drawHitLine(c, y, width) {
+  var grad = c.createLinearGradient(0, y - 4, 0, y + 4);
+  grad.addColorStop(0, 'rgba(237,230,214,0)');
+  grad.addColorStop(0.5, 'rgba(237,230,214,0.4)');
+  grad.addColorStop(1, 'rgba(237,230,214,0)');
+  c.fillStyle = grad;
+  c.fillRect(0, y - 4, width, 8);
+}
+
+function drawKeyboard(c, layoutInfo, minPitch, maxPitch, y0, height, activeMap) {
+  var layout = layoutInfo.layout;
+  var blackHeight = height * 0.62;
+  var n;
+
+  for (n = minPitch; n <= maxPitch; n++) {
+    var kw = layout[n];
+    if (!kw || kw.isBlack) continue;
+    var activeW = activeMap[n];
+    c.fillStyle = activeW ? activeW.bright : COLORS.ivory;
+    roundRectPath(c, kw.x + 1, y0, kw.width - 2, height, 4);
+    c.fill();
+    c.strokeStyle = 'rgba(10,11,14,0.45)';
+    c.lineWidth = 1;
+    c.stroke();
+    if (activeW) {
+      c.save();
+      c.shadowColor = activeW.base;
+      c.shadowBlur = 14;
+      c.fill();
+      c.restore();
+    }
+    if (kw.isC && kw.width >= 13) {
+      c.fillStyle = activeW ? '#1a1408' : 'rgba(15,20,32,0.6)';
+      c.font = '600 10px ' + "ui-monospace, SFMono-Regular, Menlo, monospace";
+      c.textAlign = 'center';
+      c.fillText('C' + (Math.floor(n / 12) - 1), kw.x + kw.width / 2, y0 + height - 10);
+    }
+  }
+
+  for (n = minPitch; n <= maxPitch; n++) {
+    var kb = layout[n];
+    if (!kb || !kb.isBlack) continue;
+    var activeB = activeMap[n];
+    c.fillStyle = activeB ? activeB.bright : COLORS.ebony;
+    roundRectPath(c, kb.x, y0, kb.width, blackHeight, 3);
+    c.fill();
+    if (activeB) {
+      c.save();
+      c.shadowColor = activeB.base;
+      c.shadowBlur = 14;
+      c.fill();
+      c.restore();
+    }
+  }
+}
+
+function render(currentTime) {
+  var dpr = window.devicePixelRatio || 1;
+  var cssWidth = canvas.width / dpr;
+  var cssHeight = canvas.height / dpr;
+
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  if (!state.fileLoaded || cssWidth <= 0 || cssHeight <= 0) return;
+
+  var keyboardHeight = Math.max(80, Math.min(150, cssHeight * 0.20));
+  var hitLineY = cssHeight - keyboardHeight;
+  var lookAheadSeconds = 4;
+  var pxPerSec = hitLineY / lookAheadSeconds;
+
+  var layoutInfo = computeKeyLayout(state.minPitch, state.maxPitch, cssWidth);
+  var layout = layoutInfo.layout;
+
+  var bgGrad = ctx.createLinearGradient(0, 0, 0, hitLineY);
+  bgGrad.addColorStop(0, '#0B0F19');
+  bgGrad.addColorStop(1, '#141B2C');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, cssWidth, hitLineY);
+
+  var activeMap = {};
+  var visMinTime = currentTime - 0.5;
+  var visMaxTime = currentTime + lookAheadSeconds + 0.5;
+
+  for (var i = 0; i < state.notes.length; i++) {
+    var n = state.notes[i];
+    if (n.startTime > visMaxTime) break;
+    if (n.endTime < visMinTime) continue;
+    var k = layout[n.pitch];
+    if (!k) continue;
+
+    var isActive = currentTime >= n.startTime && currentTime < n.endTime;
+    var col = HAND_COLORS[handOfNote(n)] || HAND_COLORS.right;
+    if (isActive) activeMap[n.pitch] = col;
+
+    var bottomY = hitLineY + (currentTime - n.startTime) * pxPerSec;
+    var topY = hitLineY + (currentTime - n.endTime) * pxPerSec;
+    if (bottomY < -10 || topY > hitLineY) continue;
+    var drawTop = Math.max(topY, -10);
+    var drawBottom = Math.min(bottomY, hitLineY);
+    if (drawBottom <= drawTop) continue;
+
+    drawNoteBar(ctx, k.x + 1, k.width - 2, drawTop, drawBottom, col.base, isActive);
+  }
+
+  drawHitLine(ctx, hitLineY, cssWidth);
+  drawKeyboard(ctx, layoutInfo, state.minPitch, state.maxPitch, hitLineY, keyboardHeight, activeMap);
+}
+
+function resizeCanvas() {
+  var dpr = window.devicePixelRatio || 1;
+  var rect = stage.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(rect.width * dpr));
+  canvas.height = Math.max(1, Math.round(rect.height * dpr));
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  render(state.fileLoaded ? getCurrentTime() : 0);
+}
+
+/* =========================================================
+   5. Аудио (Web Audio API, синтез — без сэмплов)
+   ========================================================= */
+function ensureAudio() {
+  try {
+    if (!audioCtx) {
+      var Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return null;
+      audioCtx = new Ctor();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = state.volume;
+      masterGain.connect(audioCtx.destination);
+    }
+    // WebKit после блокировки экрана или звонка уводит контекст в 'interrupted',
+    // сам он оттуда не выходит — поэтому будим из любого нерабочего состояния
+    if (audioCtx.state !== 'running' && audioCtx.resume) {
+      var pr = audioCtx.resume();
+      if (pr && pr.catch) pr.catch(function () { /* разбудим на следующем касании */ });
+    }
+  } catch (e) { return null; }
+  return audioCtx;
+}
+
+/* Safari на iPad включает звук только внутри жеста пользователя.
+   Дёргаем контекст на первом же касании экрана, чтобы первая нота не проглотилась. */
+function unlockAudioOnce() {
+  var ctxA = ensureAudio();
+  if (ctxA) {
+    try {
+      var buf = ctxA.createBuffer(1, 1, 22050);
+      var src = ctxA.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctxA.destination);
+      src.start(0);
+    } catch (e) { /* не критично */ }
+  }
+  document.removeEventListener('touchend', unlockAudioOnce, true);
+  document.removeEventListener('mousedown', unlockAudioOnce, true);
+}
+document.addEventListener('touchend', unlockAudioOnce, true);
+document.addEventListener('mousedown', unlockAudioOnce, true);
+
+function midiToFreq(pitch) {
+  return 440 * Math.pow(2, (pitch - 69) / 12);
+}
+
+function playNote(pitch, velocity, durationSec) {
+  if (!audioCtx || !masterGain) return;
+  var freq = midiToFreq(pitch);
+  var now = audioCtx.currentTime;
+  var gainNode = audioCtx.createGain();
+  gainNode.connect(masterGain);
+
+  var peak = Math.min(0.32, (velocity / 127) * 0.4 + 0.05);
+  var attack = 0.006;
+  var decay = 0.3;
+  var sustainLevel = Math.max(peak * 0.22, 0.0001);
+  var holdUntil = Math.max(durationSec, attack + decay + 0.03);
+  var release = 0.35;
+
+  gainNode.gain.setValueAtTime(0.0001, now);
+  gainNode.gain.linearRampToValueAtTime(peak, now + attack);
+  gainNode.gain.exponentialRampToValueAtTime(sustainLevel, now + attack + decay);
+  gainNode.gain.setValueAtTime(sustainLevel, now + holdUntil);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, now + holdUntil + release);
+
+  var osc1 = audioCtx.createOscillator();
+  osc1.type = 'triangle';
+  osc1.frequency.value = freq;
+  osc1.connect(gainNode);
+
+  var osc2 = audioCtx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.value = freq * 2.005;
+  var gain2 = audioCtx.createGain();
+  gain2.gain.value = 0.13;
+  osc2.connect(gain2);
+  gain2.connect(gainNode);
+
+  var stopTime = now + holdUntil + release + 0.05;
+  osc1.start(now);
+  osc1.stop(stopTime);
+  osc2.start(now);
+  osc2.stop(stopTime);
+  osc1.onended = function () {
+    try { gainNode.disconnect(); gain2.disconnect(); } catch (e) { /* уже отключено */ }
+  };
+}
+
+/* =========================================================
+   6. Плеер / транспорт
+   ========================================================= */
+function getCurrentTime() {
+  if (!state.isPlaying) return state.currentTimeCache;
+  var elapsed = ((performance.now() - state.startTimestamp) / 1000) * state.speed;
+  return state.startOffset + elapsed;
+}
+
+function resyncTriggerPointer(t) {
+  var idx = -1;
+  for (var i = 0; i < state.notes.length; i++) {
+    if (state.notes[i].startTime >= t) { idx = i; break; }
+  }
+  state.nextTriggerIdx = idx === -1 ? state.notes.length : idx;
+}
+
+function tickAudioTriggers(currentTime) {
+  while (state.nextTriggerIdx < state.notes.length && state.notes[state.nextTriggerIdx].startTime <= currentTime) {
+    var n = state.notes[state.nextTriggerIdx];
+    // Если кадры пропали (свернули приложение) — не вываливать залп опоздавших нот
+    if (currentTime - n.startTime < 0.25) {
+      playNote(n.pitch, n.velocity, (n.endTime - n.startTime) / state.speed);
+    }
+    state.nextTriggerIdx++;
+  }
+}
+
+function play() {
+  if (!state.fileLoaded || state.isPlaying) return;
+  ensureAudio();
+  if (state.currentTimeCache >= state.totalDuration - 0.01) {
+    state.currentTimeCache = 0;
+    resyncTriggerPointer(0);
+  }
+  state.startTimestamp = performance.now();
+  state.startOffset = state.currentTimeCache;
+  state.isPlaying = true;
+  setPlayIcon(true);
+  var token = ++state.loopToken;
+  requestAnimationFrame(function () { loop(token); });
+}
+
+function pause() {
+  if (!state.isPlaying) return;
+  state.currentTimeCache = getCurrentTime();
+  state.isPlaying = false;
+  setPlayIcon(false);
+}
+
+function togglePlay() {
+  if (!state.fileLoaded) return;
+  if (state.isPlaying) pause(); else play();
+}
+
+function seekTo(t) {
+  if (!state.fileLoaded) return;
+  t = Math.max(0, Math.min(t, state.totalDuration));
+  state.currentTimeCache = t;
+  if (state.isPlaying) {
+    state.startOffset = t;
+    state.startTimestamp = performance.now();
+  }
+  resyncTriggerPointer(t);
+  render(t);
+  updateTimeUI(t);
+  updateSeekUI(t);
+}
+
+function restart() { seekTo(0); }
+
+function setSpeed(pct) {
+  if (state.isPlaying) {
+    state.startOffset = getCurrentTime();
+    state.startTimestamp = performance.now();
+  }
+  state.speed = pct / 100;
+}
+
+function loop(token) {
+  if (!state.isPlaying || token !== state.loopToken) return;
+  var t = getCurrentTime();
+  if (t >= state.totalDuration) {
+    state.isPlaying = false;
+    state.currentTimeCache = state.totalDuration;
+    setPlayIcon(false);
+    render(state.totalDuration);
+    updateTimeUI(state.totalDuration);
+    updateSeekUI(state.totalDuration);
+    return;
+  }
+  tickAudioTriggers(t);
+  render(t);
+  updateTimeUI(t);
+  updateSeekUI(t);
+  requestAnimationFrame(function () { loop(token); });
+}
+
+/* =========================================================
+   7. Обновление интерфейса
+   ========================================================= */
+function formatTime(s) {
+  if (!isFinite(s) || s < 0) s = 0;
+  var m = Math.floor(s / 60);
+  var sec = Math.floor(s % 60);
+  return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function updateTimeUI(t) {
+  timeDisplay.textContent = formatTime(t) + ' / ' + formatTime(state.totalDuration);
+}
+
+function updateSeekUI(t) {
+  if (seekDragging) return;
+  var pct = state.totalDuration > 0 ? (t / state.totalDuration) * 1000 : 0;
+  seekBar.value = String(pct);
+}
+
+function buildLegend() {
+  legendEl.innerHTML = '';
+  var items = [['Правая рука', COLORS.gold], ['Левая рука', COLORS.silverBlue]];
+  items.forEach(function (pair) {
+    var item = document.createElement('span');
+    item.className = 'legend-item';
+    var dot = document.createElement('span');
+    dot.className = 'legend-dot';
+    dot.style.background = pair[1];
+    item.appendChild(dot);
+    item.appendChild(document.createTextNode(pair[0]));
+    legendEl.appendChild(item);
+  });
+}
+
+/* ---- Панель «Руки» ---- */
+function buildHandsPanel(reason) {
+  handsRows.innerHTML = '';
+
+  if (state.singleTrack) {
+    handsHint.textContent = 'В файле всего один трек — разделения рук в нём нет. Ноты делятся по высоте: всё выше выбранной ноты считается правой рукой.';
+    var row = document.createElement('div');
+    row.className = 'split-row';
+    var lab = document.createElement('label');
+    lab.setAttribute('for', 'splitSlider');
+    lab.id = 'splitLabel';
+    lab.textContent = 'Граница рук: ' + noteLabel(state.splitPitch);
+    var inp = document.createElement('input');
+    inp.type = 'range';
+    inp.id = 'splitSlider';
+    inp.min = '36';
+    inp.max = '84';
+    inp.step = '1';
+    inp.value = String(state.splitPitch);
+    inp.addEventListener('input', function () {
+      state.splitPitch = Number(inp.value);
+      lab.textContent = 'Граница рук: ' + noteLabel(state.splitPitch);
+      render(getCurrentTime());
+      saveSession();
+    });
+    row.appendChild(lab);
+    row.appendChild(inp);
+    handsRows.appendChild(row);
+    return;
+  }
+
+  handsHint.textContent = 'Определено ' + reason + '. Если цвет не совпадает с тем, как вы играете, — переключите здесь.';
+
+  state.tracks.forEach(function (t) {
+    var row = document.createElement('div');
+    row.className = 'hand-row';
+
+    var info = document.createElement('div');
+    info.className = 'hand-info';
+    var nameEl = document.createElement('span');
+    nameEl.className = 'hand-name';
+    nameEl.textContent = t.name || ('Трек ' + (t.index + 1));
+    var metaEl = document.createElement('span');
+    metaEl.className = 'hand-meta';
+    metaEl.textContent = t.count + ' ' + plural(t.count, 'нота', 'ноты', 'нот') + ' · ' + noteLabel(t.minPitch) + '–' + noteLabel(t.maxPitch);
+    info.appendChild(nameEl);
+    info.appendChild(metaEl);
+
+    var toggle = document.createElement('div');
+    toggle.className = 'hand-toggle';
+    [['right', 'Правая'], ['left', 'Левая']].forEach(function (pair) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.hand = pair[0];
+      b.textContent = pair[1];
+      if (state.handByTrack[t.index] === pair[0]) b.className = 'on';
+      b.addEventListener('click', function () {
+        state.handByTrack[t.index] = pair[0];
+        Array.prototype.forEach.call(toggle.children, function (c) {
+          c.className = c.dataset.hand === pair[0] ? 'on' : '';
+        });
+        render(getCurrentTime());
+        saveSession();
+      });
+      toggle.appendChild(b);
+    });
+
+    row.appendChild(info);
+    row.appendChild(toggle);
+    handsRows.appendChild(row);
+  });
+}
+
+function setHandsPanelOpen(open) {
+  handsPanel.hidden = !open;
+  handsBtn.classList.toggle('is-on', open);
+}
+
+/* =========================================================
+   8. Загрузка файла
+   ========================================================= */
+function applyMidi(fileName, base64, parsedResult, saved) {
+  // Канал 10 — ударные. Вне 21–108 клавиш на рояле нет: такие ноты раньше
+  // звучали, но не рисовались — щелчок из ниоткуда. Выбрасываем целиком.
+  var filtered = parsedResult.notes.filter(function (n) {
+    return n.channel !== 9 && n.pitch >= 21 && n.pitch <= 108;
+  });
+  if (filtered.length === 0) {
+    showError('В файле нет нот, которые можно сыграть на фортепиано.');
+    return false;
+  }
+
+  var pitches = filtered.map(function (n) { return n.pitch; });
+  var range = paddedRange(Math.min.apply(null, pitches), Math.max.apply(null, pitches));
+
+  state.notes = filtered;
+  state.tracks = summariseTracks(filtered, parsedResult.trackNames);
+  state.singleTrack = state.tracks.length < 2;
+  state.fileName = fileName;
+  state.fileBase64 = base64 || '';
+  // Длительность — по оставшимся нотам: иначе хвост ударных или служебного
+  // трека растягивал ползунок в пустоту
+  state.totalDuration = filtered.reduce(function (m, n) { return Math.max(m, n.endTime); }, 0);
+  state.minPitch = range[0];
+  state.maxPitch = range[1];
+  state.fileLoaded = true;
+  state.isPlaying = false;
+  state.currentTimeCache = 0;
+
+  var auto = autoAssignHands(state.tracks);
+  state.handByTrack = auto.map;
+  state.splitPitch = 60;
+
+  // Ручные поправки прошлой сессии — только если файл тот же самый
+  if (saved && saved.name === fileName) {
+    if (saved.hands) {
+      Object.keys(saved.hands).forEach(function (k) {
+        if (saved.hands[k] === 'left' || saved.hands[k] === 'right') state.handByTrack[k] = saved.hands[k];
+      });
+    }
+    if (typeof saved.split === 'number') state.splitPitch = saved.split;
+  }
+
+  resyncTriggerPointer(0);
+  buildHandsPanel(auto.reason);
+  buildLegend();
+
+  fileNameEl.textContent = fileName;
+  var isBuiltIn = fileName === BUILT_IN_NAME;
+  creditEl.hidden = !isBuiltIn;
+  if (isBuiltIn) {
+    creditEl.innerHTML = 'MIDI: <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, Бернд Крюгер, CC BY-SA';
+  }
+  emptyState.hidden = true;
+  errorState.hidden = true;
+  transport.hidden = false;
+  clearBtn.hidden = false;
+  handsBtn.hidden = false;
+  setPlayIcon(false);
+
+  updateTimeUI(0);
+  updateSeekUI(0);
+  resizeCanvas();
+  return true;
+}
+
+function showError(message) {
+  errorText.textContent = message;
+  errorState.hidden = false;
+  emptyState.hidden = true;
+}
+
+function resetToEmpty() {
+  pause();
+  state.fileLoaded = false;
+  state.notes = [];
+  state.tracks = [];
+  state.fileBase64 = '';
+  state.fileName = '';
+  state.currentTimeCache = 0;
+  fileNameEl.textContent = '';
+  creditEl.hidden = true;
+  emptyState.hidden = false;
+  errorState.hidden = true;
+  transport.hidden = true;
+  clearBtn.hidden = true;
+  handsBtn.hidden = true;
+  setHandsPanelOpen(false);
+  saveSession(); // файл забыли, скорость и громкость оставляем
+  render(0);
+}
+
+function arrayBufferToBase64(buffer) {
+  var bytes = new Uint8Array(buffer);
+  var chunk = 0x8000;
+  var parts = [];
+  for (var i = 0; i < bytes.length; i += chunk) {
+    parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunk)));
+  }
+  return btoa(parts.join(''));
+}
+
+function base64ToArrayBuffer(b64) {
+  var bin = atob(b64);
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function loadMidiFile(file) {
+  errorState.hidden = true;
+  if (!file) {
+    showError('Файл не выбран. Если ничего не открылось — попробуйте ещё раз кнопку «Загрузить MIDI».');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    var base64 = '';
+    try {
+      base64 = arrayBufferToBase64(e.target.result);
+    } catch (err) { /* без сохранения переживём */ }
+    try {
+      var parsed = parseMidi(e.target.result);
+      var result = buildNotesFromMidi(parsed);
+      if (result.notes.length === 0) {
+        showError('Файл прочитался, но нот в нём не оказалось.');
+        return;
+      }
+      if (applyMidi(file.name, base64, result, null)) saveSession();
+    } catch (err) {
+      showError(err && err.message ? err.message : 'Файл повреждён или это не MIDI.');
+    }
+  };
+  reader.onerror = function () {
+    showError('Не удалось прочитать файл. На iPad такое бывает с файлами из iCloud, которые ещё не скачаны на устройство — откройте файл в «Файлах», дождитесь загрузки и попробуйте снова.');
+  };
+  try {
+    reader.readAsArrayBuffer(file);
+  } catch (err) {
+    showError('Браузер не дал прочитать этот файл.');
+  }
+}
+
+function loadBuiltIn() {
+  errorState.hidden = true;
+  try {
+    var parsed = parseMidi(base64ToArrayBuffer(BUILT_IN_B64));
+    var result = buildNotesFromMidi(parsed);
+    if (applyMidi(BUILT_IN_NAME, BUILT_IN_B64, result, null)) saveSession();
+  } catch (e) {
+    showError('Не удалось открыть встроенную пьесу: ' + (e && e.message ? e.message : 'причина неизвестна'));
+  }
+}
+
+/* =========================================================
+   9. Сохранение сессии
+   =========================================================
+   localStorage может быть недоступен (Safari при открытии файла
+   напрямую с диска). Тогда просто не сохраняем — работу это не ломает. */
+function storageAvailable() {
+  try {
+    var k = '__t';
+    localStorage.setItem(k, '1');
+    localStorage.removeItem(k);
+    return true;
+  } catch (e) { return false; }
+}
+var canStore = storageAvailable();
+
+function saveSession() {
+  if (!canStore) return;
+  try {
+    var payload = {
+      v: 2,
+      name: state.fileName,
+      b64: state.fileBase64,
+      hands: state.handByTrack,
+      split: state.splitPitch,
+      speed: Number(speedSlider.value),
+      volume: Number(volumeSlider.value)
+    };
+    var text = JSON.stringify(payload);
+    if (text.length > 2000000) { payload.b64 = ''; text = JSON.stringify(payload); }
+    try {
+      localStorage.setItem(STORE_KEY, text);
+    } catch (quota) {
+      // Не влезло. Прошлую запись обязательно убираем, иначе при следующем
+      // запуске откроется чужой, давно забытый файл.
+      localStorage.removeItem(STORE_KEY);
+      payload.b64 = '';
+      localStorage.setItem(STORE_KEY, JSON.stringify(payload));
+    }
+  } catch (e) { /* хранилище недоступно — работаем без него */ }
+}
+
+function restoreSession() {
+  if (!canStore) return;
+  var saved;
+  try {
+    var raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    saved = JSON.parse(raw);
+  } catch (e) { return; }
+  if (!saved) return;
+
+  if (typeof saved.speed === 'number') {
+    speedSlider.value = String(saved.speed);
+    speedLabel.textContent = saved.speed + '%';
+    state.speed = saved.speed / 100;
+  }
+  if (typeof saved.volume === 'number') {
+    volumeSlider.value = String(saved.volume);
+    state.volume = saved.volume / 100;
+  }
+  if (!saved.b64) return;
+
+  try {
+    var parsed = parseMidi(base64ToArrayBuffer(saved.b64));
+    var result = buildNotesFromMidi(parsed);
+    if (result.notes.length) applyMidi(saved.name || 'Восстановленный файл', saved.b64, result, saved);
+  } catch (e) { /* мусор в хранилище — начинаем с чистого листа */ }
+}
+
+/* =========================================================
+   10. Обвязка интерфейса
+   ========================================================= */
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', function () { setTimeout(resizeCanvas, 250); });
+if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(stage);
+
+// Кнопка вместо <label for>: в Safari связка label + скрытый input
+// срабатывает не всегда, прямой click() по input надёжнее.
+uploadBtn.addEventListener('click', function () { fileInput.click(); });
+
+fileInput.addEventListener('change', function (e) {
+  var f = e.target.files && e.target.files[0];
+  loadMidiFile(f);
+  fileInput.value = '';
+});
+
+['dragenter', 'dragover'].forEach(function (evt) {
+  stage.addEventListener(evt, function (e) { e.preventDefault(); stage.classList.add('dragging'); });
+});
+['dragleave', 'drop'].forEach(function (evt) {
+  stage.addEventListener(evt, function (e) { e.preventDefault(); stage.classList.remove('dragging'); });
+});
+stage.addEventListener('drop', function (e) {
+  var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) loadMidiFile(file);
+});
+
+clearBtn.addEventListener('click', resetToEmpty);
+builtInBtn.addEventListener('click', loadBuiltIn);
+document.getElementById('builtInBtn2').addEventListener('click', loadBuiltIn);
+playBtn.addEventListener('click', togglePlay);
+restartBtn.addEventListener('click', restart);
+handsBtn.addEventListener('click', function () { setHandsPanelOpen(handsPanel.hidden); });
+
+/* Перемотка: во время игры кадры плеера перебивали кадр ползунка,
+   и ноты не двигались. Поэтому на время перетаскивания ставим паузу. */
+function beginSeekDrag() {
+  if (seekDragging || !state.fileLoaded) return;   // одно касание даёт и pointerdown, и touchstart
+  seekResumeAfter = state.isPlaying;
+  if (state.isPlaying) pause();
+  seekDragging = true;
+}
+function commitSeek() {
+  if (!seekDragging) return;
+  seekDragging = false;
+  if (!state.fileLoaded) return;
+  seekTo((Number(seekBar.value) / 1000) * state.totalDuration);
+  if (seekResumeAfter) play();
+  seekResumeAfter = false;
+}
+seekBar.addEventListener('pointerdown', beginSeekDrag);
+seekBar.addEventListener('mousedown', beginSeekDrag);
+seekBar.addEventListener('touchstart', beginSeekDrag, { passive: true });
+seekBar.addEventListener('input', function () {
+  if (!state.fileLoaded) return;
+  if (!seekDragging) beginSeekDrag();
+  var t = (Number(seekBar.value) / 1000) * state.totalDuration;
+  render(t);
+  updateTimeUI(t);
+});
+seekBar.addEventListener('change', commitSeek);
+seekBar.addEventListener('pointerup', commitSeek);
+seekBar.addEventListener('mouseup', commitSeek);
+seekBar.addEventListener('touchend', commitSeek);
+seekBar.addEventListener('touchcancel', commitSeek);
+
+speedSlider.addEventListener('input', function () {
+  var pct = Number(speedSlider.value);
+  speedLabel.textContent = pct + '%';
+  setSpeed(pct);
+});
+speedSlider.addEventListener('change', saveSession);
+
+volumeSlider.addEventListener('input', function () {
+  state.volume = Number(volumeSlider.value) / 100;
+  if (masterGain) masterGain.gain.value = state.volume;
+});
+volumeSlider.addEventListener('change', saveSession);
+
+document.addEventListener('keydown', function (e) {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON')) return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.code === 'Home') { e.preventDefault(); restart(); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); seekTo(getCurrentTime() + 5); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); seekTo(getCurrentTime() - 5); }
+});
+
+// Свернули приложение — останавливаемся, чтобы не копить пропущенные ноты
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) pause();
+  else ensureAudio();   // вернулись в приложение — оживляем прерванный звук
+});
+
+/* =========================================================
+   11. Инициализация
+   ========================================================= */
+setPlayIcon(false);
+resizeCanvas();
+render(0);
+restoreSession();
+if (!state.fileLoaded) loadBuiltIn();
+
+/* Офлайн-режим. На file:// служебный скрипт не регистрируется — это нормально,
+   там он и не нужен: страница и так лежит на диске. */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function () { /* без офлайна тоже работает */ });
+  });
+}
+</script>
+</body>
+</html>
