@@ -8,7 +8,7 @@
    При обновлении приложения поднимите VERSION — старый кэш удалится сам. */
 'use strict';
 
-var VERSION = 'v2';
+var VERSION = 'v3';
 var PREFIX = 'falling-notes-';
 var CACHE = PREFIX + VERSION;
 var NET_TIMEOUT_MS = 2500;
@@ -77,7 +77,15 @@ self.addEventListener('fetch', function (e) {
         fromCache(e.request).then(function (hit) { if (hit) done(hit); });
       }, NET_TIMEOUT_MS);
 
-      fetch(e.request).then(function (resp) {
+      /* GitHub Pages отдаёт статику с Cache-Control: max-age=600, и обычный
+         fetch спокойно берёт страницу из кэша браузера — обновление не доезжает
+         до устройства. Для переходов по страницам просим в обход кэша. */
+      var req = e.request;
+      if (req.mode === 'navigate') {
+        try { req = new Request(e.request, { cache: 'reload' }); } catch (err) { req = e.request; }
+      }
+
+      fetch(req).then(function (resp) {
         clearTimeout(timer);
         // Ответ есть, но это ошибка (404 во время переразвёртывания Pages,
         // 500 и прочее) — рабочая копия из кэша полезнее страницы ошибки

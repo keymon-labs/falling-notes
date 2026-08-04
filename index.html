@@ -504,6 +504,7 @@
           <span class="file-name" id="fileName"></span>
         </div>
         <div class="panel-note">
+          <b id="appVersion"></b><br>
           Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер,
           <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.
         </div>
@@ -603,6 +604,10 @@ var HAND_COLORS = {
 };
 
 var STORE_KEY = 'falling-notes:v2';
+
+/* Метка сборки. Видна в «Настройках» — по ней сразу понятно,
+   доехало обновление до устройства или нет. */
+var APP_VERSION = 'сборка 4 · 5 августа 2026';
 
 /* Встроенная пьеса: Бетховен, Соната №14, 1 часть.
    Источник: piano-midi.de, Бернд Крюгер, лицензия CC BY-SA.
@@ -1779,6 +1784,7 @@ function applyMidi(fileName, base64, parsedResult, saved) {
   resyncTriggerPointer(0);
   buildHandsPanel(auto.reason);
   buildGridPanel();
+  document.getElementById('appVersion').textContent = APP_VERSION;
   buildLegend();
 
   fileNameEl.textContent = fileName;
