@@ -320,7 +320,39 @@
     font-family: var(--font-display);
     font-size: 17px;
     color: var(--ivory);
-    margin: 0 0 10px;
+    margin: 0;
+  }
+  /* Шапка панели прилипает к верху: список пьес может стать длинным, а
+     крестик должен оставаться под рукой в любой точке прокрутки.
+     Отрицательные поля гасят собственный отступ панели, чтобы содержимое
+     уезжало ПОД шапку, а не выглядывало сбоку. */
+  .panel-head {
+    position: sticky;
+    top: -14px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: -14px -14px 10px;
+    padding: 10px 10px 10px 14px;
+    background: rgba(27, 36, 54, 0.98);
+    border-bottom: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+  }
+  .panel-close {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
   }
   .hands-hint {
     font-size: 12px;
@@ -667,7 +699,10 @@
       </div>
 
       <section class="hands-panel is-off" id="songsPanel" hidden>
-        <p class="panel-heading">Пьесы</p>
+        <div class="panel-head">
+          <p class="panel-heading">Пьесы</p>
+          <button class="panel-close" id="songsClose" type="button" aria-label="Закрыть">×</button>
+        </div>
         <p class="hands-hint" id="songsHint">Тап по названию — открыть. Карандаш — переименовать. Крестик — убрать из списка.</p>
         <div id="songRows"></div>
         <div class="panel-foot">
@@ -676,7 +711,10 @@
       </section>
 
       <section class="hands-panel is-off" id="handsPanel" hidden>
-        <p class="panel-heading">Настройки</p>
+        <div class="panel-head">
+          <p class="panel-heading">Настройки</p>
+          <button class="panel-close" id="handsClose" type="button" aria-label="Закрыть">×</button>
+        </div>
         <p class="hands-title">Руки</p>
         <p class="hands-hint" id="handsHint"></p>
         <div id="handsRows"></div>
@@ -2610,6 +2648,10 @@ if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(stage);
     setSongsPanelOpen(!panelOpen(songsPanel));
   });
 });
+/* Панель встаёт поверх нижней панели и закрывает собой ту самую кнопку,
+   которой открывалась. Закрывать её нужно изнутри. */
+document.getElementById('songsClose').addEventListener('click', function () { setSongsPanelOpen(false); });
+document.getElementById('handsClose').addEventListener('click', function () { setHandsPanelOpen(false); });
 
 fileInput.addEventListener('change', function (e) {
   var f = e.target.files && e.target.files[0];
