@@ -340,6 +340,22 @@
     border-bottom: 1px solid var(--border);
     border-radius: 12px 12px 0 0;
   }
+  /* Номер сборки — он же выключатель строки с размерами экрана. Числа нужны
+     редко, но метко: без них разговор про геометрию превращается в спор
+     по скриншотам. Держать их на виду постоянно незачем. */
+  .version-btn {
+    display: inline-block;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ivory-dim);
+    font: inherit;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
   .panel-close {
     width: 44px;
     height: 44px;
@@ -724,8 +740,8 @@
           <span class="file-name" id="fileName"></span>
         </div>
         <div class="panel-note">
-          <b id="appVersion"></b><br>
-          <span id="metrics"></span><br>
+          <button class="version-btn" id="appVersion" type="button" title="Показать размеры экрана"></button><br>
+          <span id="metrics" hidden></span>
           Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер,
           <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.
         </div>
@@ -2650,6 +2666,11 @@ if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(stage);
 });
 /* Панель встаёт поверх нижней панели и закрывает собой ту самую кнопку,
    которой открывалась. Закрывать её нужно изнутри. */
+document.getElementById('appVersion').addEventListener('click', function () {
+  var m = document.getElementById('metrics');
+  m.hidden = !m.hidden;
+  if (!m.hidden) updateMetrics();
+});
 document.getElementById('songsClose').addEventListener('click', function () { setSongsPanelOpen(false); });
 document.getElementById('handsClose').addEventListener('click', function () { setHandsPanelOpen(false); });
 
