@@ -69,7 +69,9 @@
     padding-top: var(--safe-t);
     padding-left: var(--safe-l);
     padding-right: var(--safe-r);
-    padding-bottom: var(--safe-b);
+    /* Снизу отступа нет намеренно: холст доходит до физического низа экрана,
+       и в режиме «только клавиши» зона домашнего индикатора достаётся нотам.
+       Содержимое панели держит над индикатором её собственный padding. */
   }
 
   .file-name {
@@ -109,10 +111,21 @@
   }
 
   /* Кнопка возврата панелей: видна, только когда панели убраны */
+  .safe-probe {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 0;
+    height: var(--safe-b);
+    pointer-events: none;
+    visibility: hidden;
+  }
+
   .chrome-peek {
     position: absolute;
     right: 10px;
-    bottom: 10px;
+    /* Над зоной индикатора: .stage теперь доходит до физического низа экрана */
+    bottom: calc(10px + var(--safe-b));
     z-index: 9;
     width: 44px;
     height: 44px;
@@ -130,6 +143,47 @@
   .chrome-peek:active { background: rgba(15,20,32,0.85); }
   .chrome-peek { transition: opacity 200ms ease, transform 200ms ease; }
   .chrome-peek.is-off { opacity: 0; transform: scale(0.85); pointer-events: none; }
+
+  /* Плашка обновления. Наверху по центру, поверх поля нот; во время игры
+     не мешает — ноты в верхней полосе ещё далеко от линии попадания. */
+  .update-bar {
+    position: absolute;
+    top: calc(10px + var(--safe-t));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px 8px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(237,230,214,0.14);
+    background: rgba(27,36,54,0.92);
+    color: var(--ivory);
+    font-size: 13px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+    opacity: 1;
+    transition: opacity 220ms ease, transform 220ms ease;
+  }
+  .update-bar.is-off { opacity: 0; transform: translateX(-50%) translateY(-8px); pointer-events: none; }
+  .update-bar button { font: inherit; cursor: pointer; touch-action: manipulation; }
+  .update-bar .update-go {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(201,161,92,0.5);
+    background: rgba(201,161,92,0.16);
+    color: var(--gold-bright);
+  }
+  .update-bar .update-hide {
+    width: 44px; height: 44px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1;
+  }
 
   .grid-row {
     display: flex;
@@ -236,7 +290,7 @@
     top: 14px;
     right: 14px;
     width: min(360px, calc(100% - 28px));
-    max-height: calc(100% - 28px);
+    max-height: calc(100% - 28px - var(--safe-b));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     background: rgba(27, 36, 54, 0.97);
@@ -260,6 +314,14 @@
     color: var(--text-muted);
     margin: 0 0 4px;
   }
+  /* Название самой панели: кнопка внизу называется «Настройки», и панель
+     должна называться так же, иначе непонятно, туда ли попал */
+  .panel-heading {
+    font-family: var(--font-display);
+    font-size: 17px;
+    color: var(--ivory);
+    margin: 0 0 10px;
+  }
   .hands-hint {
     font-size: 12px;
     line-height: 1.5;
@@ -273,6 +335,97 @@
     gap: 10px;
     padding: 8px 0;
     border-top: 1px solid var(--border);
+  }
+  .empty-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  /* ---- Список пьес ---- */
+  .song-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .song-open {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    padding: 10px 0;
+    border: 0;
+    background: transparent;
+    color: var(--ivory);
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .song-row.is-current .song-open { color: var(--gold-bright); }
+  .song-row.is-current .song-open::before { content: '♪ '; }
+  /* 44×44 — размер, в который уверенно попадает палец. Меньше делать нельзя:
+     карандаш и крестик стоят рядом, а промах по крестику стирает пьесу. */
+  .song-drop, .song-rename {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  /* Подтверждение удаления прямо в строке */
+  .song-confirm {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    padding: 6px 0;
+    font-size: 13px;
+    color: var(--ivory);
+  }
+  .song-confirm span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .song-confirm button {
+    flex: none;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .song-confirm .yes {
+    border: 1px solid rgba(224,122,110,0.55);
+    background: rgba(224,122,110,0.16);
+    color: #E9A49C;
+  }
+  .song-confirm .no {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--ivory-dim);
+  }
+  .song-rename svg { display: block; margin: 0 auto; }
+  /* Поле переименования занимает место названия, ширина не скачет */
+  .song-name-input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--silver-blue);
+    background: var(--bg-panel-2);
+    color: var(--ivory);
+    font-size: 13px;
   }
   .hand-info { min-width: 0; }
   .hand-name {
@@ -292,7 +445,7 @@
   }
   .hand-toggle { display: flex; gap: 0; flex-shrink: 0; }
   .hand-toggle button {
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 13px;
     font-size: 13px;
     font-family: var(--font-body);
@@ -323,7 +476,10 @@
     z-index: 6;
     background: var(--bg-panel);
     border-top: 1px solid var(--border);
-    padding: 10px 20px 12px;
+    /* Фон панели заходит в зону индикатора, содержимое остаётся выше него.
+       bottomInset берётся из transport.offsetHeight, а он вырастает ровно на
+       ту же величину — при видимых панелях картинка не меняется. */
+    padding: 10px 20px calc(12px + var(--safe-b));
     transform: translateY(0);
     opacity: 1;
     /* Кривая — точный эквивалент easeInOutQuad из animateInset:
@@ -478,33 +634,60 @@
 </head>
 <body>
   <div class="app">
+    <!-- Щуп: высоту зоны домашнего индикатора из JS иначе не достать —
+         env(safe-area-inset-bottom) живёт только в CSS. Нулевой ширины, не виден. -->
+    <div class="safe-probe" id="safeProbe" aria-hidden="true"></div>
     <main class="stage" id="stage">
       <canvas id="rollCanvas"></canvas>
 
       <div class="overlay" id="emptyState">
         <h2>Загрузите MIDI-файл, чтобы начать</h2>
         <p>Ноты полетят вниз к клавиатуре — играйте, когда они долетают до светлой линии. Подойдёт любой файл .mid или .midi; на компьютере можно перетащить его прямо сюда.</p>
-        <button class="btn btn-primary" id="builtInBtn" type="button">Открыть «Лунную сонату»</button>
+        <div class="empty-actions">
+          <button class="btn btn-primary" id="builtInBtn" type="button">Открыть «Лунную сонату»</button>
+          <button class="btn btn-ghost" id="uploadBtn3" type="button">Загрузить MIDI</button>
+          <button class="btn btn-ghost" id="songsBtn2" type="button" hidden>Мои пьесы</button>
+        </div>
+      </div>
+
+      <div class="update-bar is-off" id="updateBar" hidden>
+        <span>Доступна новая версия</span>
+        <button class="update-go" id="updateGo" type="button">Обновить</button>
+        <button class="update-hide" id="updateHide" type="button" aria-label="Закрыть">×</button>
       </div>
 
       <div class="overlay" id="errorState" hidden>
         <h2>Не получилось прочитать файл</h2>
         <p id="errorText"></p>
-        <button class="btn btn-primary" id="builtInBtn2" type="button">Открыть «Лунную сонату»</button>
+        <div class="empty-actions">
+          <button class="btn btn-primary" id="uploadBtn4" type="button">Выбрать другой файл</button>
+          <button class="btn btn-ghost" id="songsBtn3" type="button" hidden>Мои пьесы</button>
+          <button class="btn btn-ghost" id="builtInBtn2" type="button">Открыть «Лунную сонату»</button>
+        </div>
       </div>
 
+      <section class="hands-panel is-off" id="songsPanel" hidden>
+        <p class="panel-heading">Пьесы</p>
+        <p class="hands-hint" id="songsHint">Тап по названию — открыть. Карандаш — переименовать. Крестик — убрать из списка.</p>
+        <div id="songRows"></div>
+        <div class="panel-foot">
+          <button class="btn btn-primary" id="uploadBtn2" type="button">Загрузить MIDI</button>
+        </div>
+      </section>
+
       <section class="hands-panel is-off" id="handsPanel" hidden>
+        <p class="panel-heading">Настройки</p>
         <p class="hands-title">Руки</p>
         <p class="hands-hint" id="handsHint"></p>
         <div id="handsRows"></div>
         <p class="hands-title panel-gap">Сетка</p>
         <div id="gridRows"></div>
         <div class="panel-foot">
-          <button class="btn btn-ghost" id="clearBtn" type="button">Очистить</button>
           <span class="file-name" id="fileName"></span>
         </div>
         <div class="panel-note">
           <b id="appVersion"></b><br>
+          <span id="metrics"></span><br>
           Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер,
           <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.
         </div>
@@ -531,13 +714,13 @@
         <div class="control-group">
           <label for="volumeSlider">Громкость</label>
           <input type="range" id="volumeSlider" min="0" max="100" value="70" step="5">
+          <span class="value-readout" id="volumeLabel">70%</span>
         </div>
-        <span class="credit" id="credit" hidden></span>
         <div class="legend" id="legend"></div>
         <div class="transport-actions">
+          <button class="btn btn-ghost" id="songsBtn" type="button">Пьесы</button>
           <button class="btn btn-ghost" id="handsBtn" type="button">Настройки</button>
-          <button class="btn btn-primary" id="uploadBtn" type="button">Загрузить MIDI</button>
-          <button class="btn btn-ghost btn-icon-only" id="hideChromeBtn" type="button" title="Убрать панели (тап двумя пальцами)" aria-label="Убрать панели"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
+          <button class="btn btn-ghost btn-icon-only" id="hideChromeBtn" type="button" title="Убрать панели" aria-label="Убрать панели"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
         </div>
       </div>
     </footer>
@@ -561,15 +744,19 @@ var emptyState = document.getElementById('emptyState');
 var errorState = document.getElementById('errorState');
 var errorText = document.getElementById('errorText');
 var transport = document.getElementById('transport');
+var safeProbe = document.getElementById('safeProbe');
+var metricsEl = document.getElementById('metrics');
 var fileInput = document.getElementById('fileInput');
-var uploadBtn = document.getElementById('uploadBtn');
 var fileNameEl = document.getElementById('fileName');
-var clearBtn = document.getElementById('clearBtn');
 var builtInBtn = document.getElementById('builtInBtn');
 var handsBtn = document.getElementById('handsBtn');
 var handsPanel = document.getElementById('handsPanel');
 var handsRows = document.getElementById('handsRows');
 var handsHint = document.getElementById('handsHint');
+var songRows = document.getElementById('songRows');
+var songsHint = document.getElementById('songsHint');
+var songsPanel = document.getElementById('songsPanel');
+var songsBtn = document.getElementById('songsBtn');
 var playBtn = document.getElementById('playBtn');
 var restartBtn = document.getElementById('restartBtn');
 var timeDisplay = document.getElementById('timeDisplay');
@@ -577,8 +764,8 @@ var seekBar = document.getElementById('seekBar');
 var speedSlider = document.getElementById('speedSlider');
 var speedLabel = document.getElementById('speedLabel');
 var volumeSlider = document.getElementById('volumeSlider');
+var volumeLabel = document.getElementById('volumeLabel');
 var legendEl = document.getElementById('legend');
-var creditEl = document.getElementById('credit');
 var gridRows = document.getElementById('gridRows');
 var showChromeBtn = document.getElementById('showChromeBtn');
 var hideChromeBtn = document.getElementById('hideChromeBtn');
@@ -607,7 +794,7 @@ var STORE_KEY = 'falling-notes:v2';
 
 /* Метка сборки. Видна в «Настройках» — по ней сразу понятно,
    доехало обновление до устройства или нет. */
-var APP_VERSION = 'сборка 4 · 5 августа 2026';
+var APP_VERSION = 'сборка 7 · 5 августа 2026';
 
 /* Встроенная пьеса: Бетховен, Соната №14, 1 часть.
    Источник: piano-midi.de, Бернд Крюгер, лицензия CC BY-SA.
@@ -642,6 +829,10 @@ var state = {
   grid: { bars: true, beats: true, octaves: true, blackKeys: true },
   leadIn: true,        // пустой промежуток перед первой нотой
   leadInSec: 0,
+  /* Сколько секунд музыки помещается от верха поля до линии попадания.
+     Участвует в двух местах: render и notesPxPerSec. Менять только через
+     state, иначе протяжка перестанет совпадать с движением нот. */
+  lookAhead: 4,
   chromeHidden: false,
   bottomInset: 0,      // сколько снизу занимает панель: холст не меняется, меняется геометрия рисунка
   loopToken: 0        // чтобы пауза-и-старт внутри одного кадра не плодили циклы
@@ -788,7 +979,10 @@ function buildNotesFromMidi(parsed) {
       if (e.type === 'meta' && e.metaType === 0x51 && e.data.length >= 3) {
         var d = e.data;
         var usPerQuarter = (d[0] << 16) | (d[1] << 8) | d[2];
-        tempoEvents.push({ tick: e.tick, usPerQuarter: usPerQuarter });
+        // Нулевой темп встречается в файлах кривых конвертеров. Пропустив
+        // его, время после этого события перестало бы идти вовсе, и весь
+        // хвост пьесы прозвучал бы одним аккордом.
+        if (usPerQuarter > 0) tempoEvents.push({ tick: e.tick, usPerQuarter: usPerQuarter });
       }
     });
   });
@@ -1050,6 +1244,19 @@ function isBlackKeyPitch(n) {
   return pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10;
 }
 
+/* Раскладка клавиш зависит только от диапазона нот и ширины холста, а
+   считалась заново в каждом кадре — до нескольких тысяч операций по 60–120
+   раз в секунду, на ровном месте греет планшет. Помним последний расчёт. */
+var layoutMemo = null;
+function keyLayout(minNote, maxNote, widthPx) {
+  if (layoutMemo && layoutMemo.min === minNote && layoutMemo.max === maxNote && layoutMemo.w === widthPx) {
+    return layoutMemo.value;
+  }
+  var value = computeKeyLayout(minNote, maxNote, widthPx);
+  layoutMemo = { min: minNote, max: maxNote, w: widthPx, value: value };
+  return value;
+}
+
 function computeKeyLayout(minNote, maxNote, widthPx) {
   var whiteNotes = [];
   for (var n = minNote; n <= maxNote; n++) {
@@ -1083,7 +1290,17 @@ function paddedRange(minPitch, maxPitch) {
   hi = Math.min(108, hi);
   while (isBlackKeyPitch(lo)) lo++;
   while (isBlackKeyPitch(hi)) hi--;
-  if (hi - lo < 12) hi = Math.min(108, lo + 12);
+  // Не меньше октавы. Расширять только вверх было нельзя: пьеса в самом
+  // верхнем регистре упирается в 108, и на экран выходило 3–4 клавиши
+  // во всю ширину вместо клавиатуры.
+  if (hi - lo < 12) {
+    hi = Math.min(108, lo + 12);
+    if (hi - lo < 12) lo = Math.max(21, hi - 12);
+    while (isBlackKeyPitch(lo)) lo--;
+    while (isBlackKeyPitch(hi)) hi++;
+    lo = Math.max(21, lo);
+    hi = Math.min(108, hi);
+  }
   return [lo, hi];
 }
 
@@ -1124,12 +1341,16 @@ function drawNoteBar(c, x, width, top, bottom, colorHex, isActive) {
 }
 
 function drawHitLine(c, y, width) {
-  var grad = c.createLinearGradient(0, y - 4, 0, y + 4);
+  /* Клавиатура рисуется сразу после линии и начинается ровно с y, поэтому
+     всё, что ниже y, ею закрашивается. Рисуем только вверх. */
+  var yy = Math.round(y);
+  var grad = c.createLinearGradient(0, yy - 10, 0, yy);
   grad.addColorStop(0, 'rgba(237,230,214,0)');
-  grad.addColorStop(0.5, 'rgba(237,230,214,0.4)');
-  grad.addColorStop(1, 'rgba(237,230,214,0)');
+  grad.addColorStop(1, 'rgba(237,230,214,0.35)');
   c.fillStyle = grad;
-  c.fillRect(0, y - 4, width, 8);
+  c.fillRect(0, yy - 10, width, 10);
+  c.fillStyle = 'rgba(237,230,214,0.85)';
+  c.fillRect(0, yy - 2, width, 2);
 }
 
 function drawKeyboard(c, layoutInfo, minPitch, maxPitch, y0, height, activeMap) {
@@ -1227,6 +1448,52 @@ function drawGrid(c, width, hitLineY, pxPerSec, currentTime, layout) {
   if (g.bars) timeLines(state.barTimes, 'rgba(237,230,214,0.19)');
 }
 
+/* Высота панели нужна и тогда, когда панель убрана: от неё считается высота
+   клавиш. Но убранной панели ставится hidden, и offsetHeight обнуляется —
+   поэтому меряем вслепую: на миг снимаем hidden, читаем, возвращаем обратно.
+   Между этими строками браузер не рисует, на экране ничего не мелькнёт.
+   Цена — один принудительный пересчёт вёрстки, зовём только при смене
+   размера. Приложение умеет стартовать с сохранённым «панели убраны», тогда
+   панель не показывалась ни разу и высоту взять было бы неоткуда. */
+var panelHeightMemo = 0;
+function measurePanel() {
+  var h;
+  if (transport.hidden) {
+    transport.hidden = false;
+    h = transport.offsetHeight;
+    transport.hidden = true;
+  } else {
+    h = transport.offsetHeight;
+  }
+  if (h > 0) panelHeightMemo = h;
+  return panelHeightMemo;
+}
+function panelHeight() { return panelHeightMemo || measurePanel(); }
+
+/* Высота клавиш — от неподвижной точки отсчёта: высота холста минус высота
+   панели, независимо от того, убрана панель сейчас или нет. Иначе при убранных
+   панелях клавиши раздувались бы (замерено на устройстве: 129 → 148 pt) и
+   съедали ровно то место, ради которого режим и нужен. */
+function keyboardHeightFor(cssHeight) {
+  var base = Math.max(120, cssHeight - panelHeight());
+  return Math.max(80, Math.min(150, base * 0.20));
+}
+
+/* Диагностика в «Настройках»: без неё разговор о пустоте внизу экрана
+   превращается в спор на глаз. */
+function updateMetrics() {
+  if (!metricsEl) return;
+  var safeB = (safeProbe && safeProbe.offsetHeight) || 0;
+  var cssH = Math.round(canvas.height / (window.devicePixelRatio || 1));
+  metricsEl.textContent =
+    'экран ' + screen.width + '×' + screen.height +
+    ' · окно ' + window.innerWidth + '×' + window.innerHeight +
+    ' · холст ' + cssH +
+    ' · панель ' + Math.round(panelHeight()) +
+    ' · клавиши ' + Math.round(keyboardHeightFor(cssH)) +
+    ' · зона индикатора ' + safeB;
+}
+
 function render(currentTime) {
   var dpr = window.devicePixelRatio || 1;
   var cssWidth = canvas.width / dpr;
@@ -1236,12 +1503,12 @@ function render(currentTime) {
   if (!state.fileLoaded || cssWidth <= 0 || cssHeight <= 0) return;
 
   var usableHeight = Math.max(120, cssHeight - state.bottomInset);
-  var keyboardHeight = Math.max(80, Math.min(150, usableHeight * 0.20));
+  var keyboardHeight = keyboardHeightFor(cssHeight);
   var hitLineY = usableHeight - keyboardHeight;
-  var lookAheadSeconds = 4;
+  var lookAheadSeconds = state.lookAhead;
   var pxPerSec = hitLineY / lookAheadSeconds;
 
-  var layoutInfo = computeKeyLayout(state.minPitch, state.maxPitch, cssWidth);
+  var layoutInfo = keyLayout(state.minPitch, state.maxPitch, cssWidth);
   var layout = layoutInfo.layout;
 
   var bgGrad = ctx.createLinearGradient(0, 0, 0, hitLineY);
@@ -1289,8 +1556,11 @@ function resizeCanvas() {
   canvas.style.width = rect.width + 'px';
   canvas.style.height = rect.height + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // Пересняли высоту панели: после поворота экрана она переносится по строкам
+  measurePanel();
   if (!insetAnim) state.bottomInset = state.chromeHidden ? 0 : transportHeight();
   render(state.fileLoaded ? getCurrentTime() : 0);
+  updateMetrics();
 }
 
 /* =========================================================
@@ -1339,6 +1609,28 @@ function midiToFreq(pitch) {
   return 440 * Math.pow(2, (pitch - 69) / 12);
 }
 
+/* Звучащие сейчас ноты. Раньше их никто не помнил: осциллятор запускался
+   с расписанием и доигрывал сам по себе. Из-за этого пауза на длинной ноте
+   оставляла её звенеть в тишине, а перемотка накладывала хвост прошлого
+   места на ноты нового. */
+var voices = [];
+
+function stopAllNotes() {
+  if (!audioCtx) { voices = []; return; }
+  var now = audioCtx.currentTime;
+  voices.forEach(function (v) {
+    try {
+      v.gain.gain.cancelScheduledValues(now);
+      // Обрывать разом нельзя — это щелчок. Гасим за 30 мс.
+      v.gain.gain.setValueAtTime(Math.max(v.gain.gain.value || 0.0001, 0.0001), now);
+      v.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+      v.osc1.stop(now + 0.04);
+      v.osc2.stop(now + 0.04);
+    } catch (e) { /* уже остановлена */ }
+  });
+  voices = [];
+}
+
 function playNote(pitch, velocity, durationSec) {
   if (!audioCtx || !masterGain) return;
   var freq = midiToFreq(pitch);
@@ -1377,7 +1669,11 @@ function playNote(pitch, velocity, durationSec) {
   osc1.stop(stopTime);
   osc2.start(now);
   osc2.stop(stopTime);
+  var voice = { gain: gainNode, osc1: osc1, osc2: osc2 };
+  voices.push(voice);
   osc1.onended = function () {
+    var i = voices.indexOf(voice);
+    if (i >= 0) voices.splice(i, 1);
     try { gainNode.disconnect(); gain2.disconnect(); } catch (e) { /* уже отключено */ }
   };
 }
@@ -1429,6 +1725,7 @@ function pause() {
   if (!state.isPlaying) return;
   state.currentTimeCache = getCurrentTime();
   state.isPlaying = false;
+  stopAllNotes();   // иначе длинная нота звенит в тишине после паузы
   setPlayIcon(false);
 }
 
@@ -1440,6 +1737,8 @@ function togglePlay() {
 function seekTo(t) {
   if (!state.fileLoaded) return;
   t = Math.max(0, Math.min(t, state.totalDuration));
+  // Хвост нот из прежнего места не должен накладываться на новое
+  if (Math.abs(t - state.currentTimeCache) > 0.05) stopAllNotes();
   state.currentTimeCache = t;
   if (state.isPlaying) {
     state.startOffset = t;
@@ -1612,6 +1911,158 @@ function buildHandsPanel(reason) {
   });
 }
 
+/* ---- Меню «Пьесы» ----
+   Своё меню, а не раздел в «Настройках»: библиотека — это отдельная работа
+   (открыть, переименовать, убрать, добавить), а не настройка отображения. */
+var HINT_DEFAULT = 'Тап по названию — открыть. Карандаш — переименовать. Крестик — убрать из списка.';
+var HINT_EMPTY = 'Пока пусто. Загруженные файлы будут появляться здесь — и переключаться одним касанием, без похода в «Файлы».';
+
+function buildSongsPanel() {
+  songRows.innerHTML = '';
+  var items = libLoad();
+
+  items.forEach(function (it) {
+    var row = document.createElement('div');
+    row.className = 'song-row' + (it.name === state.fileName ? ' is-current' : '');
+
+    var open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'song-open';
+    open.textContent = it.name;
+    open.addEventListener('click', function () { openFromLibrary(it.id); });
+
+    var rename = document.createElement('button');
+    rename.type = 'button';
+    rename.className = 'song-rename';
+    rename.title = 'Переименовать';
+    rename.setAttribute('aria-label', 'Переименовать «' + it.name + '»');
+    rename.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M3 17.2V21h3.8L17.8 10 14 6.2zM20.7 7.0c.4-.4.4-1 0-1.4l-2.3-2.3c-.4-.4-1-.4-1.4 0l-1.8 1.8L18.9 8.8z"/></svg>';
+    rename.addEventListener('click', function () { startRename(row, it); });
+
+    var drop = document.createElement('button');
+    drop.type = 'button';
+    drop.className = 'song-drop';
+    drop.textContent = '×';
+    drop.setAttribute('aria-label', 'Убрать «' + it.name + '» из списка');
+    drop.addEventListener('click', function () { askRemove(row, it); });
+
+    row.appendChild(open);
+    row.appendChild(rename);
+    row.appendChild(drop);
+    songRows.appendChild(row);
+  });
+
+  songsHint.textContent = libNote || (items.length ? HINT_DEFAULT : HINT_EMPTY);
+  // На пустом экране и на экране ошибки транспорт скрыт вместе с кнопкой
+  // «Пьесы» — без этих кнопок до библиотеки было бы не добраться
+  document.getElementById('songsBtn2').hidden = items.length === 0;
+  document.getElementById('songsBtn3').hidden = items.length === 0;
+}
+
+/* Удаление спрашивает подтверждения: отмены у него нет, а промах пальцем по
+   соседней кнопке стоил бы загруженного файла. Спрашиваем в самой строке —
+   системное окно перекрыло бы список и требовало лишнего касания. */
+function askRemove(row, item) {
+  row.innerHTML = '';
+  var box = document.createElement('div');
+  box.className = 'song-confirm';
+
+  var text = document.createElement('span');
+  text.textContent = 'Убрать «' + item.name + '»?';
+
+  var yes = document.createElement('button');
+  yes.type = 'button';
+  yes.className = 'yes';
+  yes.textContent = 'Убрать';
+  yes.addEventListener('click', function () {
+    libRemove(item.id);
+    // Убрали ту, что сейчас открыта: пусть доиграет, но из сессии её тоже
+    // забываем — иначе после перезапуска она вернулась бы в список сама
+    if (item.name === state.fileName) { state.fileBase64 = ''; saveSession(); }
+    buildSongsPanel();
+  });
+
+  var no = document.createElement('button');
+  no.type = 'button';
+  no.className = 'no';
+  no.textContent = 'Отмена';
+  no.addEventListener('click', buildSongsPanel);
+
+  box.appendChild(text);
+  box.appendChild(yes);
+  box.appendChild(no);
+  row.appendChild(box);
+}
+
+/* Правка имени прямо в строке: всплывающее окно на планшете перекрывает
+   список и требует лишнего касания. */
+function startRename(row, item) {
+  if (row.querySelector('.song-name-input')) return;
+  var open = row.querySelector('.song-open');
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'song-name-input';
+  input.value = item.name;
+  input.setAttribute('aria-label', 'Новое название пьесы');
+  row.replaceChild(input, open);
+
+  var done = false;
+  function finish(save) {
+    if (done) return;
+    done = true;
+    var next = input.value.trim();
+    // Пустое имя не сохраняем: строка в списке стала бы безымянной и её
+    // нельзя было бы отличить от соседней
+    if (save && next && next !== item.name) libRename(item.id, next);
+    buildSongsPanel();
+  }
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') finish(true);
+    else if (e.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', function () { finish(true); });
+  input.focus();
+  input.select();
+}
+
+/* Открыта ли панель. Судить по hidden нельзя: он выставляется в конце
+   анимации закрытия, и нажатие в эти 220 мс срабатывало наоборот. */
+function panelOpen(el) {
+  return !el.hidden && !el.classList.contains('is-off');
+}
+
+function setSongsPanelOpen(open) {
+  if (!open && songsPanel.hidden) return;
+  if (open) { setHandsPanelOpen(false); buildSongsPanel(); }
+  fadeToggle(songsPanel, open, 220);
+  songsBtn.classList.toggle('is-on', open);
+}
+
+function openFromLibrary(id) {
+  var items = libLoad();
+  var found = null;
+  for (var i = 0; i < items.length; i++) if (items[i].id === id) { found = items[i]; break; }
+  if (!found) return;
+  var b64 = libSong(id);
+  if (!b64) {
+    // Индекс есть, а файла нет: память могли почистить извне
+    libRemove(id);
+    libNote = 'Эта пьеса пропала из памяти устройства — загрузите файл заново.';
+    buildSongsPanel();
+    return;
+  }
+  if (state.isPlaying) pause();
+  try {
+    var parsed = parseMidi(base64ToArrayBuffer(b64));
+    var result = buildNotesFromMidi(parsed);
+    if (result.notes.length === 0) { showError('В сохранённой пьесе не оказалось нот.'); return; }
+    // Руки и граница у каждой пьесы свои — передаём их как «прошлую сессию»
+    if (applyMidi(found.name, b64, result, { name: found.name, hands: found.hands, split: found.split })) saveSession();
+  } catch (e) {
+    showError(e && e.message ? e.message : 'Сохранённая пьеса не читается.');
+  }
+}
+
 var GRID_ITEMS = [
   ['bars', 'Линии тактов'],
   ['beats', 'Линии долей'],
@@ -1653,6 +2104,34 @@ function buildGridPanel() {
   });
   lead.appendChild(lcb);
   gridRows.appendChild(lead);
+
+  /* Глубина обзора. Меньше — ноты крупнее и разборчивее в быстрых местах,
+     больше — дальше видно, но в плотных пассажах ноты жмутся друг к другу. */
+  var lookRow = document.createElement('div');
+  lookRow.className = 'split-row';
+  var lookLab = document.createElement('label');
+  lookLab.setAttribute('for', 'lookSlider');
+  lookLab.textContent = 'Видно вперёд: ' + lookAheadLabel(state.lookAhead);
+  var lookInp = document.createElement('input');
+  lookInp.type = 'range';
+  lookInp.id = 'lookSlider';
+  lookInp.min = '2';
+  lookInp.max = '8';
+  lookInp.step = '0.5';
+  lookInp.value = String(state.lookAhead);
+  lookInp.addEventListener('input', function () {
+    state.lookAhead = Number(lookInp.value);
+    lookLab.textContent = 'Видно вперёд: ' + lookAheadLabel(state.lookAhead);
+    render(getCurrentTime());
+    saveSession();
+  });
+  lookRow.appendChild(lookLab);
+  lookRow.appendChild(lookInp);
+  gridRows.appendChild(lookRow);
+}
+
+function lookAheadLabel(sec) {
+  return String(sec).replace('.', ',') + ' с';
 }
 
 /* Плавное появление и скрытие. Элемент сначала надо вернуть в поток
@@ -1697,10 +2176,10 @@ function transportHeight() {
 }
 
 /* Убранные панели: остаётся только клавиатура и ноты.
-   Возврат — тап двумя пальцами или маленькая кнопка в углу. */
+   Возврат — маленькая кнопка в углу. */
 function setChromeHidden(hide, instant) {
   state.chromeHidden = !!hide;
-  if (state.chromeHidden) setHandsPanelOpen(false);
+  if (state.chromeHidden) { setHandsPanelOpen(false); setSongsPanelOpen(false); }
 
   if (!state.fileLoaded) {
     transport.hidden = true;
@@ -1725,7 +2204,9 @@ function setChromeHidden(hide, instant) {
 }
 
 function setHandsPanelOpen(open) {
+  if (open) updateMetrics();      // числа всегда свежие в момент открытия
   if (!open && handsPanel.hidden) return;
+  if (open) setSongsPanelOpen(false);   // две панели в одном углу, вместе им тесно
   fadeToggle(handsPanel, open, 220);
   handsBtn.classList.toggle('is-on', open);
 }
@@ -1744,8 +2225,16 @@ function applyMidi(fileName, base64, parsedResult, saved) {
     return false;
   }
 
-  var pitches = filtered.map(function (n) { return n.pitch; });
-  var range = paddedRange(Math.min.apply(null, pitches), Math.max.apply(null, pitches));
+  // Обычным циклом, а не Math.min.apply: на файле в десятки тысяч нот
+  // apply переполняет стек аргументов и падает с RangeError — пользователь
+  // видел «файл повреждён» на совершенно целом файле
+  var loPitch = filtered[0].pitch, hiPitch = filtered[0].pitch;
+  for (var pi = 1; pi < filtered.length; pi++) {
+    var p = filtered[pi].pitch;
+    if (p < loPitch) loPitch = p;
+    if (p > hiPitch) hiPitch = p;
+  }
+  var range = paddedRange(loPitch, hiPitch);
 
   state.notes = filtered;
   state.tracks = summariseTracks(filtered, parsedResult.trackNames);
@@ -1768,6 +2257,13 @@ function applyMidi(fileName, base64, parsedResult, saved) {
   state.handByTrack = auto.map;
   state.splitPitch = 60;
 
+  // Тот же файл загрузили заново из «Файлов» — поднимем его поправки
+  // из библиотеки, чтобы не переставлять руки каждый раз
+  if (!saved) {
+    var known = libFindFor(fileName, base64 || '');
+    if (known) saved = { name: fileName, hands: known.hands, split: known.split };
+  }
+
   // Ручные поправки прошлой сессии — только если файл тот же самый
   if (saved && saved.name === fileName) {
     if (saved.hands) {
@@ -1782,17 +2278,19 @@ function applyMidi(fileName, base64, parsedResult, saved) {
   setLeadIn(desiredLeadIn());
   state.currentTimeCache = 0;
   resyncTriggerPointer(0);
+  // В библиотеку кладём любую открытую пьесу, включая встроенную: список
+  // должен быть осмысленным с первого запуска. Повторная загрузка того же
+  // имени обновляет запись, дублей не появляется.
+  libAdd(fileName, state.fileBase64, state.handByTrack, state.splitPitch);
   buildHandsPanel(auto.reason);
   buildGridPanel();
+  buildSongsPanel();
   document.getElementById('appVersion').textContent = APP_VERSION;
   buildLegend();
 
   fileNameEl.textContent = fileName;
-  var isBuiltIn = fileName === BUILT_IN_NAME;
-  creditEl.hidden = !isBuiltIn;
-  if (isBuiltIn) {
-    creditEl.innerHTML = '<a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a> · CC BY-SA';
-  }
+  // Авторство встроенной пьесы указано в «Настройках», внизу панели.
+  // Второй раз, в транспорте, оно только занимало место во время игры.
   emptyState.hidden = true;
   errorState.hidden = true;
   setPlayIcon(false);
@@ -1810,25 +2308,9 @@ function showError(message) {
   emptyState.hidden = true;
 }
 
-function resetToEmpty() {
-  pause();
-  state.fileLoaded = false;
-  state.notes = [];
-  state.tracks = [];
-  state.fileBase64 = '';
-  state.fileName = '';
-  state.currentTimeCache = 0;
-  fileNameEl.textContent = '';
-  creditEl.hidden = true;
-  emptyState.hidden = false;
-  errorState.hidden = true;
-  transport.hidden = true;
-  showChromeBtn.hidden = true;
-  state.bottomInset = 0;
-  setHandsPanelOpen(false);
-  saveSession(); // файл забыли, скорость и громкость оставляем
-  render(0);
-}
+/* Кнопка «Очистить» убрана вместе с функцией resetToEmpty: с появлением меню
+   «Пьесы» закрывать пьесу незачем — их переключают списком. Пустой экран
+   остался начальным состоянием, до того как откроется первая пьеса. */
 
 function arrayBufferToBase64(buffer) {
   var bytes = new Uint8Array(buffer);
@@ -1907,8 +2389,141 @@ function storageAvailable() {
 }
 var canStore = storageAvailable();
 
+/* ---- Библиотека пьес ----
+   Индекс лежит отдельно от самих файлов, а каждая пьеса — своим ключом.
+   Иначе любое движение ползунка (saveSession зовётся на каждый шаг)
+   переписывало бы всю библиотеку целиком — на iPad это заметно. */
+var LIB_KEY = 'falling-notes:lib';
+var SONG_PREFIX = 'falling-notes:song:';
+var libNote = '';   // что показать под списком: обычно пусто
+
+function libLoad() {
+  if (!canStore) return [];
+  try {
+    var raw = localStorage.getItem(LIB_KEY);
+    if (!raw) return [];
+    var data = JSON.parse(raw);
+    if (!data || !data.items || !data.items.length) return [];
+    return data.items.filter(function (it) { return it && it.id && it.name; });
+  } catch (e) { return []; }
+}
+
+function libWrite(items) {
+  if (!canStore) return false;
+  try {
+    localStorage.setItem(LIB_KEY, JSON.stringify({ v: 1, items: items }));
+    return true;
+  } catch (e) { return false; }
+}
+
+function libSong(id) {
+  if (!canStore) return '';
+  try { return localStorage.getItem(SONG_PREFIX + id) || ''; } catch (e) { return ''; }
+}
+
+/* Та же пьеса — это совпадение имени И содержимого. По одному имени судить
+   нельзя: «track1.mid» и «Untitled.mid» встречаются у разных пьес, и запись
+   по имени молча затёрла бы чужой файл вместе с расстановкой рук. */
+function libFindFor(name, b64) {
+  var items = libLoad();
+  var byName = null;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].name !== name) continue;
+    if (b64 && libSong(items[i].id) === b64) return items[i];
+    if (!byName) byName = items[i];
+  }
+  return b64 ? null : byName;
+}
+
+function libAdd(name, b64, hands, split) {
+  if (!canStore || !b64) return null;
+  var items = libLoad();
+  var found = libFindFor(name, b64);
+  if (found) {
+    // Файл уже лежит и он тот же самый — перезаписывать нечего, это лишние
+    // мегабайты записи при каждом открытии из списка
+    found.hands = hands || found.hands;
+    found.split = split || found.split;
+    libWrite(items.map(function (it) { return it.id === found.id ? found : it; }));
+    libNote = '';
+    return found.id;
+  }
+  var id = 's' + Date.now().toString(36) + Math.floor(Math.random() * 1000).toString(36);
+  try {
+    localStorage.setItem(SONG_PREFIX + id, b64);
+  } catch (quota) {
+    libNote = 'Не хватило места в памяти устройства. Уберите из списка лишние пьесы — и попробуйте снова.';
+    return null;
+  }
+  items.push({ id: id, name: name, hands: hands || {}, split: split || 60 });
+  if (!libWrite(items)) {
+    // Индекс не записался — файл без записи в индексе только занимает место
+    try { localStorage.removeItem(SONG_PREFIX + id); } catch (e) { /* уже неважно */ }
+    libNote = 'Не хватило места в памяти устройства. Уберите из списка лишние пьесы — и попробуйте снова.';
+    return null;
+  }
+  libNote = '';
+  return id;
+}
+
+/* Файлы, на которые в индексе нет ссылки, съедали бы память молча и навсегда:
+   увидеть и убрать их из приложения нельзя. Подметаем один раз при запуске. */
+function libSweep() {
+  if (!canStore) return 0;
+  var alive = {};
+  libLoad().forEach(function (it) { alive[SONG_PREFIX + it.id] = true; });
+  var doomed = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(SONG_PREFIX) === 0 && !alive[k]) doomed.push(k);
+    }
+  } catch (e) { return 0; }
+  doomed.forEach(function (k) {
+    try { localStorage.removeItem(k); } catch (e) { /* не вышло — переживём */ }
+  });
+  return doomed.length;
+}
+
+function libRename(id, name) {
+  var items = libLoad();
+  var was = null;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].id === id) { was = items[i].name; items[i].name = name; break; }
+  }
+  if (was === null) return;
+  libWrite(items);
+  // Открытая сейчас пьеса должна переименоваться и на экране, и в сессии
+  if (state.fileLoaded && state.fileName === was) {
+    state.fileName = name;
+    fileNameEl.textContent = name;
+    saveSession();
+  }
+}
+
+function libRemove(id) {
+  var items = libLoad().filter(function (it) { return it.id !== id; });
+  libWrite(items);
+  try { localStorage.removeItem(SONG_PREFIX + id); } catch (e) { /* нет так нет */ }
+  libNote = '';
+}
+
+/* Ручные поправки рук живут вместе с пьесой: у каждой свои. */
+function libUpdateHands(name, hands, split) {
+  if (!canStore) return;
+  var items = libLoad();
+  var changed = false;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].name === name) { items[i].hands = hands; items[i].split = split; changed = true; break; }
+  }
+  if (changed) libWrite(items);
+}
+
 function saveSession() {
   if (!canStore) return;
+  // Руки и граница принадлежат пьесе, а не сессии: переключитесь на другую
+  // и обратно — расстановка вернётся та, что вы сделали.
+  if (state.fileLoaded) libUpdateHands(state.fileName, state.handByTrack, state.splitPitch);
   try {
     var payload = {
       v: 2,
@@ -1918,6 +2533,7 @@ function saveSession() {
       split: state.splitPitch,
       grid: state.grid,
       leadIn: state.leadIn,
+      look: state.lookAhead,
       chromeHidden: state.chromeHidden,
       speed: Number(speedSlider.value),
       volume: Number(volumeSlider.value)
@@ -1953,6 +2569,7 @@ function restoreSession() {
   }
   if (typeof saved.volume === 'number') {
     volumeSlider.value = String(saved.volume);
+    volumeLabel.textContent = saved.volume + '%';
     state.volume = saved.volume / 100;
   }
   if (saved.grid) {
@@ -1961,6 +2578,8 @@ function restoreSession() {
     });
   }
   if (typeof saved.leadIn === 'boolean') state.leadIn = saved.leadIn;
+  // Диапазон сверяем: в хранилище мог остаться мусор или значение от будущей версии
+  if (typeof saved.look === 'number' && saved.look >= 2 && saved.look <= 8) state.lookAhead = saved.look;
   if (typeof saved.chromeHidden === 'boolean') state.chromeHidden = saved.chromeHidden;
   if (!saved.b64) return;
 
@@ -1980,7 +2599,17 @@ if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(stage);
 
 // Кнопка вместо <label for>: в Safari связка label + скрытый input
 // срабатывает не всегда, прямой click() по input надёжнее.
-uploadBtn.addEventListener('click', function () { fileInput.click(); });
+/* Загрузка файла — операция библиотеки, поэтому кнопка живёт в меню «Пьесы».
+   На пустом экране и на экране ошибки она продублирована: там это
+   единственный выход, нижней панели в тех состояниях не видно. */
+['uploadBtn2', 'uploadBtn3', 'uploadBtn4'].forEach(function (id) {
+  document.getElementById(id).addEventListener('click', function () { fileInput.click(); });
+});
+['songsBtn', 'songsBtn2', 'songsBtn3'].forEach(function (id) {
+  document.getElementById(id).addEventListener('click', function () {
+    setSongsPanelOpen(!panelOpen(songsPanel));
+  });
+});
 
 fileInput.addEventListener('change', function (e) {
   var f = e.target.files && e.target.files[0];
@@ -2005,9 +2634,13 @@ stage.addEventListener('drop', function (e) {
    короткий тап        — играть / пауза
    протянуть пальцем   — перемотка; вверх = назад по времени,
                          как будто держишь саму ленту с нотами
-   тап двумя пальцами  — убрать или вернуть панели
+
+   Жеста «тап двумя пальцами» больше нет: он срабатывал случайно, когда руки
+   идут над экраном во время игры, а панели и так убираются значком в углу
+   транспорта и возвращаются кружком в углу экрана. Касание двумя-тремя
+   пальцами теперь делает то же, что одиночное.
    ========================================================= */
-var gesture = { active: false, moved: false, multi: false, startX: 0, startY: 0,
+var gesture = { active: false, moved: false, startX: 0, startY: 0,
                 startedAt: 0, baseTime: 0, wasPlaying: false };
 /* Safari после касания досылает совместимые mousedown/mouseup. Без этой
    отсечки тап отрабатывал дважды и сам себя отменял. Мышь всё равно нужна:
@@ -2017,9 +2650,10 @@ function mouseAllowed() { return Date.now() - lastTouchAt > 700; }
 
 function notesPxPerSec() {
   var dpr = window.devicePixelRatio || 1;
-  var h = Math.max(120, canvas.height / dpr - state.bottomInset);
-  var hit = h - Math.max(80, Math.min(150, h * 0.20));
-  return hit > 0 ? hit / 4 : 1;
+  var cssHeight = canvas.height / dpr;
+  var h = Math.max(120, cssHeight - state.bottomInset);
+  var hit = h - keyboardHeightFor(cssHeight);
+  return hit > 0 ? hit / state.lookAhead : 1;
 }
 
 function beginGesture(x, y) {
@@ -2050,8 +2684,16 @@ function endGesture() {
   var tap = !gesture.moved && (Date.now() - gesture.startedAt) < 400;
   var resume = gesture.wasPlaying;
   gesture.active = false;
-  if (tap) { togglePlay(); return; }
-  if (resume && !state.isPlaying && !document.hidden) play();
+  // document.hidden: палец отпущен уже после сворачивания приложения —
+  // запускать музыку в фоне не надо
+  if (tap) { if (!document.hidden) togglePlay(); return; }
+  // Дотянули до самого конца: play() в этом месте сбросил бы время в ноль
+  // и пьеса прыгнула бы в начало. Стоим в конце, как и оставили.
+  if (resume && !state.isPlaying && !document.hidden && !atEnd()) play();
+}
+
+function atEnd() {
+  return state.currentTimeCache >= state.totalDuration - 0.01;
 }
 
 function abortGesture() {
@@ -2059,58 +2701,29 @@ function abortGesture() {
   var resume = gesture.wasPlaying;
   gesture.active = false;
   // document.hidden: touchcancel может прийти уже после сворачивания
-  // приложения — тогда возобновлять нечего, время бы просто убежало
-  if (resume && !state.isPlaying && !document.hidden) play();
+  // приложения — тогда возобновлять нечего, время бы просто убежало.
+  // atEnd: у самого конца play() сбросил бы время в ноль, см. endGesture
+  if (resume && !state.isPlaying && !document.hidden && !atEnd()) play();
 }
 
 canvas.addEventListener('touchstart', function (e) {
   lastTouchAt = Date.now();
-  if (e.touches.length >= 2) {
-    if (!gesture.multi) {
-      gesture.multi = true;
-      gesture.startedAt = Date.now();
-      gesture.moved = false;
-      // Обязательно от текущего касания: при одновременном приземлении двух
-      // пальцев здесь оставались координаты прошлого жеста, и микродрожание
-      // сразу считалось движением — тап двумя пальцами не срабатывал
-      gesture.startX = e.touches[0].clientX;
-      gesture.startY = e.touches[0].clientY;
-      abortGesture();
-    }
-    return;
-  }
-  if (gesture.multi) return;
   beginGesture(e.touches[0].clientX, e.touches[0].clientY);
 }, { passive: true });
 
 canvas.addEventListener('touchmove', function (e) {
   lastTouchAt = Date.now();
-  if (gesture.multi) {
-    var t0 = e.touches[0];
-    if (t0 && (Math.abs(t0.clientX - gesture.startX) > 14 || Math.abs(t0.clientY - gesture.startY) > 14)) {
-      gesture.moved = true;
-    }
-    return;
-  }
   if (!gesture.active) return;
   e.preventDefault();
   moveGesture(e.touches[0].clientX, e.touches[0].clientY);
 }, { passive: false });
 
-function onTouchFinish(e) {
+function onTouchFinish() {
   lastTouchAt = Date.now();
-  if (gesture.multi) {
-    if (e.touches.length === 0) {
-      var quick = (Date.now() - gesture.startedAt) < 600 && !gesture.moved;
-      gesture.multi = false;
-      if (quick) setChromeHidden(!state.chromeHidden);
-    }
-    return;
-  }
   endGesture();
 }
 canvas.addEventListener('touchend', onTouchFinish);
-canvas.addEventListener('touchcancel', function () { gesture.multi = false; abortGesture(); });
+canvas.addEventListener('touchcancel', function () { abortGesture(); });
 
 canvas.addEventListener('mousedown', function (e) {
   if (!mouseAllowed()) return;
@@ -2122,12 +2735,11 @@ window.addEventListener('mouseup', function () { if (gesture.active) endGesture(
 hideChromeBtn.addEventListener('click', function () { setChromeHidden(true); });
 showChromeBtn.addEventListener('click', function () { setChromeHidden(false); });
 
-clearBtn.addEventListener('click', resetToEmpty);
 builtInBtn.addEventListener('click', loadBuiltIn);
 document.getElementById('builtInBtn2').addEventListener('click', loadBuiltIn);
 playBtn.addEventListener('click', togglePlay);
 restartBtn.addEventListener('click', restart);
-handsBtn.addEventListener('click', function () { setHandsPanelOpen(handsPanel.hidden); });
+handsBtn.addEventListener('click', function () { setHandsPanelOpen(!panelOpen(handsPanel)); });
 
 /* Перемотка: во время игры кадры плеера перебивали кадр ползунка,
    и ноты не двигались. Поэтому на время перетаскивания ставим паузу. */
@@ -2142,7 +2754,9 @@ function commitSeek() {
   seekDragging = false;
   if (!state.fileLoaded) return;
   seekTo(Number(seekBar.value) / 100);
-  if (seekResumeAfter) play();
+  // document.hidden: приложение свернули прямо во время перетаскивания —
+  // возобновлять нечего, иначе музыка заиграет в фоне, а время убежит
+  if (seekResumeAfter && !document.hidden) play();
   seekResumeAfter = false;
 }
 seekBar.addEventListener('pointerdown', beginSeekDrag);
@@ -2170,7 +2784,15 @@ speedSlider.addEventListener('change', saveSession);
 
 volumeSlider.addEventListener('input', function () {
   state.volume = Number(volumeSlider.value) / 100;
-  if (masterGain) masterGain.gain.value = state.volume;
+  volumeLabel.textContent = volumeSlider.value + '%';
+  // Мгновенная смена усиления даёт щелчок на звучащих нотах: сглаживаем
+  if (masterGain) {
+    if (masterGain.gain.setTargetAtTime && audioCtx) {
+      masterGain.gain.setTargetAtTime(state.volume, audioCtx.currentTime, 0.015);
+    } else {
+      masterGain.gain.value = state.volume;
+    }
+  }
 });
 volumeSlider.addEventListener('change', saveSession);
 
@@ -2194,6 +2816,7 @@ document.addEventListener('visibilitychange', function () {
 setPlayIcon(false);
 resizeCanvas();
 render(0);
+libSweep();
 restoreSession();
 if (!state.fileLoaded) loadBuiltIn();
 
@@ -2203,7 +2826,34 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').catch(function () { /* без офлайна тоже работает */ });
   });
+
+  /* Служебный скрипт сообщает, что показанная страница устарела: сеть ответила
+     уже после того, как её отдали из кэша, и принесла другую версию. Так бывает
+     при медленном соединении и через VPN. Раньше это выглядело как «обновление
+     не приходит вообще» — свежая копия молча ждала следующего запуска. */
+  navigator.serviceWorker.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'update-ready') return;
+    showUpdateBar();
+  });
 }
+
+var updateBarShown = false;
+function showUpdateBar() {
+  var bar = document.getElementById('updateBar');
+  if (!bar || updateBarShown) return;
+  updateBarShown = true;
+  fadeToggle(bar, true, 220);
+}
+(function () {
+  var bar = document.getElementById('updateBar');
+  if (!bar) return;
+  document.getElementById('updateGo').addEventListener('click', function () {
+    location.reload();
+  });
+  document.getElementById('updateHide').addEventListener('click', function () {
+    fadeToggle(bar, false, 220);
+  });
+})();
 </script>
 </body>
 </html>

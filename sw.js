@@ -8,7 +8,7 @@
    При обновлении приложения поднимите VERSION — старый кэш удалится сам. */
 'use strict';
 
-var VERSION = 'v3';
+var VERSION = 'v4';
 var PREFIX = 'falling-notes-';
 var CACHE = PREFIX + VERSION;
 var NET_TIMEOUT_MS = 2500;
@@ -58,6 +58,19 @@ function fromCache(request) {
   });
 }
 
+/* Страницу уже показали из кэша, а сеть принесла другую — сказать об этом.
+   Без этого обновление выглядит как «не приезжает вообще»: свежая копия
+   молча ложится в кэш и покажется только при следующем запуске. */
+function notifyUpdateReady() {
+  return self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    .then(function (list) {
+      list.forEach(function (client) {
+        try { client.postMessage({ type: 'update-ready' }); } catch (err) { /* клиент ушёл */ }
+      });
+    })
+    .catch(function () { /* не смогли достучаться — не беда, обновится при следующем запуске */ });
+}
+
 self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
   var url;
@@ -95,8 +108,22 @@ self.addEventListener('fetch', function (e) {
         }
         if (resp.type === 'basic') {
           var copy = resp.clone();
+          // Страницу успели отдать из кэша: сверим показанное со свежим,
+          // но только для переходов — на иконках сравнивать нечего.
+          var late = (settled && e.request.mode === 'navigate') ? resp.clone() : null;
           var write = caches.open(CACHE)
-            .then(function (c) { return c.put(e.request, copy); })
+            .then(function (c) {
+              if (!late) return c.put(e.request, copy);
+              // Читаем старое до записи, иначе сравнивать будет уже не с чем
+              return fromCache(e.request).then(function (shown) {
+                if (!shown) return c.put(e.request, copy);
+                return Promise.all([shown.text(), late.text()]).then(function (pair) {
+                  return c.put(e.request, copy).then(function () {
+                    if (pair[0] !== pair[1]) return notifyUpdateReady();
+                  });
+                });
+              });
+            })
             .catch(function () { /* нет места — не беда, отдадим и так */ });
           // Если ответ уже отдан по тайм-ауту, событие неактивно и waitUntil
           // бросает InvalidStateError. Запись всё равно идёт, шуметь не о чем.
