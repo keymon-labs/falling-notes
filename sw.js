@@ -8,7 +8,7 @@
    При обновлении приложения поднимите VERSION — старый кэш удалится сам. */
 'use strict';
 
-var VERSION = 'v4';
+var VERSION = 'v5';
 var PREFIX = 'falling-notes-';
 var CACHE = PREFIX + VERSION;
 var NET_TIMEOUT_MS = 2500;
@@ -133,7 +133,8 @@ self.addEventListener('fetch', function (e) {
       }).catch(function () {
         clearTimeout(timer);
         fromCache(e.request).then(function (hit) {
-          done(hit || new Response('Нет сети и нет копии в памяти устройства.', {
+          // Служебный скрипт не знает языка приложения — ответ на обоих
+          done(hit || new Response('Нет сети и нет копии в памяти устройства. / No network and no offline copy on this device.', {
             status: 503,
             headers: { 'Content-Type': 'text/plain; charset=utf-8' }
           }));

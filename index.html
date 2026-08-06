@@ -234,6 +234,9 @@
 
   #rollCanvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
+  /* Подсказка при перетаскивании — единственный текст, живущий в CSS.
+     Перевод — правилом ниже по атрибуту lang, из словаря её не достать. */
+  html[lang="en"] .stage.dragging::after { content: 'Release to load the MIDI file' !important; }
   .stage.dragging::after {
     content: 'Отпустите, чтобы загрузить MIDI';
     position: absolute;
@@ -711,6 +714,7 @@
           <button class="btn btn-primary" id="uploadBtn4" type="button">Выбрать другой файл</button>
           <button class="btn btn-ghost" id="songsBtn3" type="button" hidden>Мои пьесы</button>
           <button class="btn btn-ghost" id="builtInBtn2" type="button">Открыть «Лунную сонату»</button>
+          <button class="btn btn-ghost" id="errorCloseBtn" type="button">Закрыть</button>
         </div>
       </div>
 
@@ -731,19 +735,24 @@
           <p class="panel-heading">Настройки</p>
           <button class="panel-close" id="handsClose" type="button" aria-label="Закрыть">×</button>
         </div>
-        <p class="hands-title">Руки</p>
+        <p class="hands-title" id="handsTitleMain">Руки</p>
         <p class="hands-hint" id="handsHint"></p>
         <div id="handsRows"></div>
-        <p class="hands-title panel-gap">Сетка</p>
+        <p class="hands-title panel-gap" id="gridTitle">Сетка</p>
         <div id="gridRows"></div>
+        <p class="hands-title panel-gap">Язык · Language</p>
+        <div class="hand-row">
+          <div class="hand-info"><span class="hand-name" id="langName">Язык интерфейса</span></div>
+          <div class="hand-toggle" id="langToggle"></div>
+        </div>
         <div class="panel-foot">
           <span class="file-name" id="fileName"></span>
         </div>
         <div class="panel-note">
           <button class="version-btn" id="appVersion" type="button" title="Показать размеры экрана"></button><br>
           <span id="metrics" hidden></span>
-          Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер,
-          <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.
+          <span id="builtInCredit">Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер,
+          <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.</span>
         </div>
       </section>
 
@@ -846,14 +855,201 @@ var HAND_COLORS = {
 
 var STORE_KEY = 'falling-notes:v2';
 
-/* Метка сборки. Видна в «Настройках» — по ней сразу понятно,
-   доехало обновление до устройства или нет. */
-var APP_VERSION = 'сборка 7 · 5 августа 2026';
+/* =========================================================
+   Язык интерфейса
+   =========================================================
+   Два словаря, всё видимое пользователю берётся через tr(key).
+   Выбор хранится и переживает перезапуск; по умолчанию — язык системы.
+   Разметку помечать не нужно: applyStaticTexts() проставляет тексты по id
+   при старте и переключении, а панели и так перестраиваются функциями
+   build*. Метка сборки — ключ build_info; имя встроенной пьесы — ключ
+   builtin_name, в списке пьес она на языке интерфейса. */
+var LANG_KEY = 'falling-notes:lang';
+var STR = {
+  ru: {
+    app_name: 'Падающие ноты',
+    doc_title: 'Падающие ноты — тренажёр по MIDI',
+    build_info: 'сборка 8 · 6 августа 2026',
+    builtin_name: 'Лунная соната',
+    empty_title: 'Загрузите MIDI-файл, чтобы начать',
+    empty_text: 'Ноты полетят вниз к клавиатуре — играйте, когда они долетают до светлой линии. Подойдёт любой файл .mid или .midi; на компьютере можно перетащить его прямо сюда.',
+    open_builtin: 'Открыть «Лунную сонату»',
+    load_midi: 'Загрузить MIDI',
+    my_pieces: 'Мои пьесы',
+    error_title: 'Не получилось прочитать файл',
+    pick_other: 'Выбрать другой файл',
+    close: 'Закрыть',
+    update_available: 'Доступна новая версия',
+    update_go: 'Обновить',
+    songs_heading: 'Пьесы',
+    settings_heading: 'Настройки',
+    hands_title: 'Руки',
+    grid_title: 'Сетка',
+    lang_name: 'Язык интерфейса',
+    version_btn_title: 'Показать размеры экрана',
+    builtin_credit: 'Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер, <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.',
+    restart_title: 'В начало',
+    play_title: 'Играть / пауза',
+    play_aria: 'Играть или пауза',
+    seek_aria: 'Перемотка',
+    speed: 'Скорость',
+    volume: 'Громкость',
+    pieces_btn: 'Пьесы',
+    settings_btn: 'Настройки',
+    hide_panels: 'Убрать панели',
+    show_panels: 'Показать панели',
+    err_not_midi: 'Это не MIDI-файл: внутри нет заголовка MThd. Проверьте, что выбран файл .mid или .midi, а не архив или ярлык.',
+    err_zero_div: 'В заголовке указано нулевое деление времени — такой MIDI прочитать нельзя.',
+    err_smpte: 'SMPTE-деление времени не поддерживается — нужен обычный MIDI с тиками на четверть.',
+    err_no_tracks: 'В файле не нашлось ни одного трека (MTrk). Возможно, файл повреждён.',
+    hint_single: 'В файле всего один трек — разделения рук в нём нет. Ноты делятся по высоте: всё выше выбранной ноты считается правой рукой.',
+    hint_names: 'Определено по именам треков. Если цвет не совпадает с тем, как вы играете, — переключите здесь.',
+    hint_name_right: 'Определено по имени трека «правая» и высоте остальных. Если цвет не совпадает с тем, как вы играете, — переключите здесь.',
+    hint_name_left: 'Определено по имени трека «левая» и высоте остальных. Если цвет не совпадает с тем, как вы играете, — переключите здесь.',
+    hint_pitch: 'Определено по средней высоте треков. Если цвет не совпадает с тем, как вы играете, — переключите здесь.',
+    split_label: 'Граница рук: ',
+    track_default: 'Трек',
+    right_short: 'Правая',
+    left_short: 'Левая',
+    left_hand: 'Левая рука',
+    right_hand: 'Правая рука',
+    grid_bars: 'Линии тактов',
+    grid_beats: 'Линии долей',
+    grid_octaves: 'Границы октав',
+    grid_black: 'Столбцы чёрных клавиш',
+    lead_in: 'Разбег перед началом',
+    look_ahead: 'Видно вперёд: ',
+    songs_hint_default: 'Тап по названию — открыть. Карандаш — переименовать. Крестик — убрать из списка.',
+    songs_hint_empty: 'Пока пусто. Загруженные файлы будут появляться здесь — и переключаться одним касанием, без похода в «Файлы».',
+    rename_title: 'Переименовать',
+    rename_aria: 'Переименовать «{name}»',
+    remove_aria: 'Убрать «{name}» из списка',
+    new_name_aria: 'Новое название пьесы',
+    remove_q: 'Убрать «{name}»?',
+    remove_yes: 'Убрать',
+    cancel: 'Отмена',
+    gone_from_storage: 'Эта пьеса пропала из памяти устройства — загрузите файл заново.',
+    saved_no_notes: 'В сохранённой пьесе не оказалось нот.',
+    saved_unreadable: 'Сохранённая пьеса не читается.',
+    no_piano_notes: 'В файле нет нот, которые можно сыграть на фортепиано.',
+    no_file: 'Файл не выбран. Если ничего не открылось — попробуйте ещё раз кнопку «Загрузить MIDI».',
+    file_no_notes: 'Файл прочитался, но нот в нём не оказалось.',
+    file_broken: 'Файл повреждён или это не MIDI.',
+    read_failed: 'Не удалось прочитать файл. На iPad такое бывает с файлами из iCloud, которые ещё не скачаны на устройство — откройте файл в «Файлах», дождитесь загрузки и попробуйте снова.',
+    browser_refused: 'Браузер не дал прочитать этот файл.',
+    open_builtin_failed: 'Не удалось открыть встроенную пьесу: ',
+    reason_unknown: 'причина неизвестна',
+    quota: 'Не хватило места в памяти устройства. Уберите из списка лишние пьесы — и попробуйте снова.',
+    restored_name: 'Восстановленный файл',
+    m_screen: 'экран',
+    m_window: 'окно',
+    m_canvas: 'холст',
+    m_panel: 'панель',
+    m_keys: 'клавиши',
+    m_safe: 'зона индикатора'
+  },
+  en: {
+    app_name: 'Falling Notes',
+    doc_title: 'Falling Notes — a MIDI practice trainer',
+    build_info: 'build 8 · August 6, 2026',
+    builtin_name: 'Moonlight Sonata',
+    empty_title: 'Load a MIDI file to get started',
+    empty_text: 'Notes will fall down toward the keyboard — play each one as it reaches the light line. Any .mid or .midi file will do; on a computer you can also drop one right here.',
+    open_builtin: 'Open the Moonlight Sonata',
+    load_midi: 'Load MIDI',
+    my_pieces: 'My pieces',
+    error_title: 'Could not read the file',
+    pick_other: 'Choose another file',
+    close: 'Close',
+    update_available: 'A new version is available',
+    update_go: 'Update',
+    songs_heading: 'Pieces',
+    settings_heading: 'Settings',
+    hands_title: 'Hands',
+    grid_title: 'Grid',
+    lang_name: 'Interface language',
+    version_btn_title: 'Show screen dimensions',
+    builtin_credit: 'Built-in piece: Beethoven, Sonata No. 14, 1st movement. MIDI by Bernd Krueger, <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, licensed CC BY-SA.',
+    restart_title: 'To the beginning',
+    play_title: 'Play / pause',
+    play_aria: 'Play or pause',
+    seek_aria: 'Seek',
+    speed: 'Speed',
+    volume: 'Volume',
+    pieces_btn: 'Pieces',
+    settings_btn: 'Settings',
+    hide_panels: 'Hide panels',
+    show_panels: 'Show panels',
+    err_not_midi: 'This is not a MIDI file: there is no MThd header inside. Make sure you picked a .mid or .midi file, not an archive or a shortcut.',
+    err_zero_div: 'The header declares a zero time division — such a MIDI cannot be read.',
+    err_smpte: 'SMPTE time division is not supported — a regular MIDI with ticks per quarter note is required.',
+    err_no_tracks: 'No tracks (MTrk) were found in the file. It may be corrupted.',
+    hint_single: 'The file has a single track — there is no hand split inside it. Notes are divided by pitch: everything above the chosen note counts as the right hand.',
+    hint_names: 'Detected from the track names. If a colour does not match the way you play — switch it here.',
+    hint_name_right: 'Detected from the “right hand” track name and the pitch of the other tracks. If a colour does not match the way you play — switch it here.',
+    hint_name_left: 'Detected from the “left hand” track name and the pitch of the other tracks. If a colour does not match the way you play — switch it here.',
+    hint_pitch: 'Detected from the average pitch of the tracks. If a colour does not match the way you play — switch it here.',
+    split_label: 'Hand split: ',
+    track_default: 'Track',
+    right_short: 'Right',
+    left_short: 'Left',
+    left_hand: 'Left hand',
+    right_hand: 'Right hand',
+    grid_bars: 'Bar lines',
+    grid_beats: 'Beat lines',
+    grid_octaves: 'Octave boundaries',
+    grid_black: 'Black-key columns',
+    lead_in: 'Lead-in before the start',
+    look_ahead: 'Visible ahead: ',
+    songs_hint_default: 'Tap a title to open it. The pencil renames, the cross removes it from the list.',
+    songs_hint_empty: 'Nothing here yet. Loaded files will appear in this list — and switch with a single tap, no trip to the Files app.',
+    rename_title: 'Rename',
+    rename_aria: 'Rename “{name}”',
+    remove_aria: 'Remove “{name}” from the list',
+    new_name_aria: 'New piece name',
+    remove_q: 'Remove “{name}”?',
+    remove_yes: 'Remove',
+    cancel: 'Cancel',
+    gone_from_storage: 'This piece has vanished from the device storage — load the file again.',
+    saved_no_notes: 'The saved piece turned out to have no notes.',
+    saved_unreadable: 'The saved piece cannot be read.',
+    no_piano_notes: 'The file contains no notes that can be played on a piano.',
+    no_file: 'No file was selected. If nothing opened — try the “Load MIDI” button again.',
+    file_no_notes: 'The file was read, but there were no notes in it.',
+    file_broken: 'The file is corrupted, or it is not MIDI.',
+    read_failed: 'Could not read the file. On iPad this happens with iCloud files that are not yet on the device — open the file in the Files app, let it download, and try again.',
+    browser_refused: 'The browser did not allow reading this file.',
+    open_builtin_failed: 'Could not open the built-in piece: ',
+    reason_unknown: 'reason unknown',
+    quota: 'Not enough space in the device storage. Remove some pieces from the list — and try again.',
+    restored_name: 'Restored file',
+    m_screen: 'screen',
+    m_window: 'window',
+    m_canvas: 'canvas',
+    m_panel: 'panel',
+    m_keys: 'keys',
+    m_safe: 'home indicator zone'
+  }
+};
+var LANG = (function () {
+  var saved = '';
+  try { saved = localStorage.getItem(LANG_KEY) || ''; } catch (e) { /* нет памяти — угадаем по системе */ }
+  if (STR[saved]) return saved;
+  return ((navigator.language || 'ru').toLowerCase().indexOf('ru') === 0) ? 'ru' : 'en';
+})();
+
+function tr(key) {
+  var d = STR[LANG] || STR.ru;
+  return (key in d) ? d[key] : STR.ru[key];
+}
+
+/* Подстановка имени пьесы в готовую фразу. Клеить фразу из кусков нельзя:
+   в двух языках разный порядок слов, поэтому фраза в словаре лежит целиком. */
+function trf(key, name) { return tr(key).replace('{name}', name); }
 
 /* Встроенная пьеса: Бетховен, Соната №14, 1 часть.
    Источник: piano-midi.de, Бернд Крюгер, лицензия CC BY-SA.
    Руки в файле разделены по трекам — программа берёт их оттуда. */
-var BUILT_IN_NAME = 'Лунная соната';
 var BUILT_IN_B64 = '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';
 
 /* =========================================================
@@ -933,17 +1129,17 @@ function parseMidi(arrayBuffer) {
 
   var headerId = readString(4);
   if (headerId !== 'MThd') {
-    throw new Error('Это не MIDI-файл: внутри нет заголовка MThd. Проверьте, что выбран файл .mid или .midi, а не архив или ярлык.');
+    throw new Error(tr('err_not_midi'));
   }
   var headerLen = readUint32();
   var format = readUint16();
   var numTracksDeclared = readUint16();
   var division = readUint16();
   if (division === 0) {
-    throw new Error('В заголовке указано нулевое деление времени — такой MIDI прочитать нельзя.');
+    throw new Error(tr('err_zero_div'));
   }
   if (division & 0x8000) {
-    throw new Error('SMPTE-деление времени не поддерживается — нужен обычный MIDI с тиками на четверть.');
+    throw new Error(tr('err_smpte'));
   }
   pos += Math.max(0, headerLen - 6);
 
@@ -1001,7 +1197,7 @@ function parseMidi(arrayBuffer) {
   }
 
   if (tracks.length === 0) {
-    throw new Error('В файле не нашлось ни одного трека (MTrk). Возможно, файл повреждён.');
+    throw new Error(tr('err_no_tracks'));
   }
   return { format: format, numTracks: tracks.length, division: division, tracks: tracks };
 }
@@ -1176,7 +1372,10 @@ function buildNotesFromMidi(parsed) {
 var RIGHT_WORDS = /(^|[^a-zа-яё])(right|rechte|rechts|droite|derecha|destra|treble|melod|прав)|(^|[^a-zа-яё])r\.?h\.?([^a-zа-яё]|$)/i;
 var LEFT_WORDS  = /(^|[^a-zа-яё])(left|linke|links|gauche|izquierda|sinistra|лев)|(^|[^a-zа-яё])(l\.?h\.?|bass|бас)([^a-zа-яё]|$)/i;
 
-var NOTE_NAMES = ['До', 'До#', 'Ре', 'Ре#', 'Ми', 'Фа', 'Фа#', 'Соль', 'Соль#', 'Ля', 'Ля#', 'Си'];
+var NOTE_NAMES = {
+  ru: ['До', 'До#', 'Ре', 'Ре#', 'Ми', 'Фа', 'Фа#', 'Соль', 'Соль#', 'Ля', 'Ля#', 'Си'],
+  en: ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+};
 function plural(n, one, few, many) {
   var a = Math.abs(n) % 100, b = a % 10;
   if (a > 10 && a < 20) return many;
@@ -1186,7 +1385,14 @@ function plural(n, one, few, many) {
 }
 
 function noteLabel(pitch) {
-  return NOTE_NAMES[((pitch % 12) + 12) % 12] + (Math.floor(pitch / 12) - 1);
+  return NOTE_NAMES[LANG][((pitch % 12) + 12) % 12] + (Math.floor(pitch / 12) - 1);
+}
+
+/* Счёт нот с числительным: русские склонения не ложатся на английскую
+   пару one/many, поэтому ветка на язык, а не общий plural */
+function notesCountLabel(n) {
+  if (LANG === 'en') return n + ' ' + (n === 1 ? 'note' : 'notes');
+  return n + ' ' + plural(n, 'нота', 'ноты', 'нот');
 }
 
 function summariseTracks(notes, trackNames) {
@@ -1210,10 +1416,11 @@ function summariseTracks(notes, trackNames) {
 
 function autoAssignHands(tracks) {
   var map = {};
-  if (tracks.length === 0) return { map: map, reason: 'нет нот' };
+  // reason — ключ словаря: подпись собирается как tr('hint_' + reason)
+  if (tracks.length === 0) return { map: map, reason: 'none' };
 
   if (tracks.length === 1) {
-    return { map: map, reason: 'один трек' };
+    return { map: map, reason: 'single' };
   }
 
   // 1. По именам
@@ -1237,7 +1444,7 @@ function autoAssignHands(tracks) {
         map[t.index] = Math.abs(t.avgPitch - rightAvg) <= Math.abs(t.avgPitch - leftAvg) ? 'right' : 'left';
       }
     });
-    return { map: map, reason: 'по именам треков' };
+    return { map: map, reason: 'names' };
   }
 
   // Названа только одна рука. Доверяем этому лишь если названное — весомая
@@ -1263,7 +1470,7 @@ function autoAssignHands(tracks) {
       var bothHands = tracks.some(function (t) { return map[t.index] === 'right'; }) &&
                       tracks.some(function (t) { return map[t.index] === 'left'; });
       if (bothHands) {
-        return { map: map, reason: 'по имени трека «' + (hasRight ? 'правая' : 'левая') + '» и высоте остальных' };
+        return { map: map, reason: hasRight ? 'name_right' : 'name_left' };
       }
     }
   }
@@ -1274,7 +1481,7 @@ function autoAssignHands(tracks) {
   var sorted = tracks.slice().sort(function (a, b) { return b.avgPitch - a.avgPitch; });
   var cut = Math.ceil(sorted.length / 2);
   sorted.forEach(function (t, i) { map[t.index] = i < cut ? 'right' : 'left'; });
-  return { map: map, reason: 'по средней высоте треков' };
+  return { map: map, reason: 'pitch' };
 }
 
 function avgOf(tracks, map, hand) {
@@ -1540,12 +1747,12 @@ function updateMetrics() {
   var safeB = (safeProbe && safeProbe.offsetHeight) || 0;
   var cssH = Math.round(canvas.height / (window.devicePixelRatio || 1));
   metricsEl.textContent =
-    'экран ' + screen.width + '×' + screen.height +
-    ' · окно ' + window.innerWidth + '×' + window.innerHeight +
-    ' · холст ' + cssH +
-    ' · панель ' + Math.round(panelHeight()) +
-    ' · клавиши ' + Math.round(keyboardHeightFor(cssH)) +
-    ' · зона индикатора ' + safeB;
+    tr('m_screen') + ' ' + screen.width + '×' + screen.height +
+    ' · ' + tr('m_window') + ' ' + window.innerWidth + '×' + window.innerHeight +
+    ' · ' + tr('m_canvas') + ' ' + cssH +
+    ' · ' + tr('m_panel') + ' ' + Math.round(panelHeight()) +
+    ' · ' + tr('m_keys') + ' ' + Math.round(keyboardHeightFor(cssH)) +
+    ' · ' + tr('m_safe') + ' ' + safeB;
 }
 
 function render(currentTime) {
@@ -1680,6 +1887,7 @@ function stopAllNotes() {
       v.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
       v.osc1.stop(now + 0.04);
       v.osc2.stop(now + 0.04);
+      if (v.osc3) v.osc3.stop(now + 0.04);
     } catch (e) { /* уже остановлена */ }
   });
   voices = [];
@@ -1710,25 +1918,48 @@ function playNote(pitch, velocity, durationSec) {
   osc1.frequency.value = freq;
   osc1.connect(gainNode);
 
+  /* Низы на встроенных динамиках: основную частоту самых левых нот
+     (30–80 Гц) динамик планшета не воспроизводит, и нота почти пропадает.
+     Ниже До3 плавно усиливаем призвук ×2 и добавляем ×3 — ухо достраивает
+     бас по обертонам само (тот же приём, что в ноутбучных трактах).
+     Общий уровень не трогаем: на больших колонках низы и так слышны. */
+  var bass = pitch < 48 ? Math.min(1, (48 - pitch) / 24) : 0;
+
   var osc2 = audioCtx.createOscillator();
   osc2.type = 'sine';
   osc2.frequency.value = freq * 2.005;
   var gain2 = audioCtx.createGain();
-  gain2.gain.value = 0.13;
+  gain2.gain.value = 0.13 + bass * 0.5;
   osc2.connect(gain2);
   gain2.connect(gainNode);
+
+  var osc3 = null, gain3 = null;
+  if (bass > 0) {
+    osc3 = audioCtx.createOscillator();
+    osc3.type = 'sine';
+    osc3.frequency.value = freq * 3.004;
+    gain3 = audioCtx.createGain();
+    gain3.gain.value = bass * 0.3;
+    osc3.connect(gain3);
+    gain3.connect(gainNode);
+  }
 
   var stopTime = now + holdUntil + release + 0.05;
   osc1.start(now);
   osc1.stop(stopTime);
   osc2.start(now);
   osc2.stop(stopTime);
-  var voice = { gain: gainNode, osc1: osc1, osc2: osc2 };
+  if (osc3) { osc3.start(now); osc3.stop(stopTime); }
+  var voice = { gain: gainNode, osc1: osc1, osc2: osc2, osc3: osc3 };
   voices.push(voice);
   osc1.onended = function () {
     var i = voices.indexOf(voice);
     if (i >= 0) voices.splice(i, 1);
-    try { gainNode.disconnect(); gain2.disconnect(); } catch (e) { /* уже отключено */ }
+    try {
+      gainNode.disconnect();
+      gain2.disconnect();
+      if (gain3) gain3.disconnect();
+    } catch (e) { /* уже отключено */ }
   };
 }
 
@@ -1879,7 +2110,7 @@ function updateSeekUI(t) {
 function buildLegend() {
   legendEl.innerHTML = '';
   // Порядок как на клавиатуре: левая рука слева, правая справа
-  var items = [['Левая рука', COLORS.silverBlue], ['Правая рука', COLORS.gold]];
+  var items = [[tr('left_hand'), COLORS.silverBlue], [tr('right_hand'), COLORS.gold]];
   items.forEach(function (pair) {
     var item = document.createElement('span');
     item.className = 'legend-item';
@@ -1892,18 +2123,20 @@ function buildLegend() {
   });
 }
 
-/* ---- Панель «Руки» ---- */
-function buildHandsPanel(reason) {
+/* ---- Панель «Руки» ----
+   Причина раскладки лежит в state.handReason: панель перестраивается
+   и при смене языка, когда autoAssignHands уже отработал. */
+function buildHandsPanel() {
   handsRows.innerHTML = '';
 
   if (state.singleTrack) {
-    handsHint.textContent = 'В файле всего один трек — разделения рук в нём нет. Ноты делятся по высоте: всё выше выбранной ноты считается правой рукой.';
+    handsHint.textContent = tr('hint_single');
     var row = document.createElement('div');
     row.className = 'split-row';
     var lab = document.createElement('label');
     lab.setAttribute('for', 'splitSlider');
     lab.id = 'splitLabel';
-    lab.textContent = 'Граница рук: ' + noteLabel(state.splitPitch);
+    lab.textContent = tr('split_label') + noteLabel(state.splitPitch);
     var inp = document.createElement('input');
     inp.type = 'range';
     inp.id = 'splitSlider';
@@ -1913,7 +2146,7 @@ function buildHandsPanel(reason) {
     inp.value = String(state.splitPitch);
     inp.addEventListener('input', function () {
       state.splitPitch = Number(inp.value);
-      lab.textContent = 'Граница рук: ' + noteLabel(state.splitPitch);
+      lab.textContent = tr('split_label') + noteLabel(state.splitPitch);
       render(getCurrentTime());
       saveSession();
     });
@@ -1923,7 +2156,7 @@ function buildHandsPanel(reason) {
     return;
   }
 
-  handsHint.textContent = 'Определено ' + reason + '. Если цвет не совпадает с тем, как вы играете, — переключите здесь.';
+  handsHint.textContent = tr('hint_' + (state.handReason || 'pitch'));
 
   state.tracks.forEach(function (t) {
     var row = document.createElement('div');
@@ -1933,16 +2166,16 @@ function buildHandsPanel(reason) {
     info.className = 'hand-info';
     var nameEl = document.createElement('span');
     nameEl.className = 'hand-name';
-    nameEl.textContent = t.name || ('Трек ' + (t.index + 1));
+    nameEl.textContent = t.name || (tr('track_default') + ' ' + (t.index + 1));
     var metaEl = document.createElement('span');
     metaEl.className = 'hand-meta';
-    metaEl.textContent = t.count + ' ' + plural(t.count, 'нота', 'ноты', 'нот') + ' · ' + noteLabel(t.minPitch) + '–' + noteLabel(t.maxPitch);
+    metaEl.textContent = notesCountLabel(t.count) + ' · ' + noteLabel(t.minPitch) + '–' + noteLabel(t.maxPitch);
     info.appendChild(nameEl);
     info.appendChild(metaEl);
 
     var toggle = document.createElement('div');
     toggle.className = 'hand-toggle';
-    [['right', 'Правая'], ['left', 'Левая']].forEach(function (pair) {
+    [['right', tr('right_short')], ['left', tr('left_short')]].forEach(function (pair) {
       var b = document.createElement('button');
       b.type = 'button';
       b.dataset.hand = pair[0];
@@ -1968,8 +2201,7 @@ function buildHandsPanel(reason) {
 /* ---- Меню «Пьесы» ----
    Своё меню, а не раздел в «Настройках»: библиотека — это отдельная работа
    (открыть, переименовать, убрать, добавить), а не настройка отображения. */
-var HINT_DEFAULT = 'Тап по названию — открыть. Карандаш — переименовать. Крестик — убрать из списка.';
-var HINT_EMPTY = 'Пока пусто. Загруженные файлы будут появляться здесь — и переключаться одним касанием, без похода в «Файлы».';
+/* Подписи под списком пьес — ключи songs_hint_default / songs_hint_empty */
 
 function buildSongsPanel() {
   songRows.innerHTML = '';
@@ -1988,8 +2220,8 @@ function buildSongsPanel() {
     var rename = document.createElement('button');
     rename.type = 'button';
     rename.className = 'song-rename';
-    rename.title = 'Переименовать';
-    rename.setAttribute('aria-label', 'Переименовать «' + it.name + '»');
+    rename.title = tr('rename_title');
+    rename.setAttribute('aria-label', trf('rename_aria', it.name));
     rename.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M3 17.2V21h3.8L17.8 10 14 6.2zM20.7 7.0c.4-.4.4-1 0-1.4l-2.3-2.3c-.4-.4-1-.4-1.4 0l-1.8 1.8L18.9 8.8z"/></svg>';
     rename.addEventListener('click', function () { startRename(row, it); });
 
@@ -1997,7 +2229,7 @@ function buildSongsPanel() {
     drop.type = 'button';
     drop.className = 'song-drop';
     drop.textContent = '×';
-    drop.setAttribute('aria-label', 'Убрать «' + it.name + '» из списка');
+    drop.setAttribute('aria-label', trf('remove_aria', it.name));
     drop.addEventListener('click', function () { askRemove(row, it); });
 
     row.appendChild(open);
@@ -2006,7 +2238,7 @@ function buildSongsPanel() {
     songRows.appendChild(row);
   });
 
-  songsHint.textContent = libNote || (items.length ? HINT_DEFAULT : HINT_EMPTY);
+  songsHint.textContent = libNote || (items.length ? tr('songs_hint_default') : tr('songs_hint_empty'));
   // На пустом экране и на экране ошибки транспорт скрыт вместе с кнопкой
   // «Пьесы» — без этих кнопок до библиотеки было бы не добраться
   document.getElementById('songsBtn2').hidden = items.length === 0;
@@ -2022,24 +2254,27 @@ function askRemove(row, item) {
   box.className = 'song-confirm';
 
   var text = document.createElement('span');
-  text.textContent = 'Убрать «' + item.name + '»?';
+  text.textContent = trf('remove_q', item.name);
 
   var yes = document.createElement('button');
   yes.type = 'button';
   yes.className = 'yes';
-  yes.textContent = 'Убрать';
+  yes.textContent = tr('remove_yes');
   yes.addEventListener('click', function () {
+    // Сверяем и содержимое до удаления: одноимённая чужая пьеса —
+    // не повод забывать открытую
+    var isOpen = item.name === state.fileName && libSong(item.id) === state.fileBase64;
     libRemove(item.id);
     // Убрали ту, что сейчас открыта: пусть доиграет, но из сессии её тоже
     // забываем — иначе после перезапуска она вернулась бы в список сама
-    if (item.name === state.fileName) { state.fileBase64 = ''; saveSession(); }
+    if (isOpen) { state.fileBase64 = ''; saveSession(); }
     buildSongsPanel();
   });
 
   var no = document.createElement('button');
   no.type = 'button';
   no.className = 'no';
-  no.textContent = 'Отмена';
+  no.textContent = tr('cancel');
   no.addEventListener('click', buildSongsPanel);
 
   box.appendChild(text);
@@ -2057,7 +2292,7 @@ function startRename(row, item) {
   input.type = 'text';
   input.className = 'song-name-input';
   input.value = item.name;
-  input.setAttribute('aria-label', 'Новое название пьесы');
+  input.setAttribute('aria-label', tr('new_name_aria'));
   row.replaceChild(input, open);
 
   var done = false;
@@ -2101,7 +2336,7 @@ function openFromLibrary(id) {
   if (!b64) {
     // Индекс есть, а файла нет: память могли почистить извне
     libRemove(id);
-    libNote = 'Эта пьеса пропала из памяти устройства — загрузите файл заново.';
+    libNote = tr('gone_from_storage');
     buildSongsPanel();
     return;
   }
@@ -2109,19 +2344,20 @@ function openFromLibrary(id) {
   try {
     var parsed = parseMidi(base64ToArrayBuffer(b64));
     var result = buildNotesFromMidi(parsed);
-    if (result.notes.length === 0) { showError('В сохранённой пьесе не оказалось нот.'); return; }
+    if (result.notes.length === 0) { showError(tr('saved_no_notes')); return; }
     // Руки и граница у каждой пьесы свои — передаём их как «прошлую сессию»
     if (applyMidi(found.name, b64, result, { name: found.name, hands: found.hands, split: found.split })) saveSession();
   } catch (e) {
-    showError(e && e.message ? e.message : 'Сохранённая пьеса не читается.');
+    showError(e && e.message ? e.message : tr('saved_unreadable'));
   }
 }
 
+/* Вторая колонка — ключ словаря, подпись берётся при построении панели */
 var GRID_ITEMS = [
-  ['bars', 'Линии тактов'],
-  ['beats', 'Линии долей'],
-  ['octaves', 'Границы октав'],
-  ['blackKeys', 'Столбцы чёрных клавиш']
+  ['bars', 'grid_bars'],
+  ['beats', 'grid_beats'],
+  ['octaves', 'grid_octaves'],
+  ['blackKeys', 'grid_black']
 ];
 
 function buildGridPanel() {
@@ -2131,7 +2367,7 @@ function buildGridPanel() {
     var key = item[0];
     var row = document.createElement('label');
     row.className = 'grid-row';
-    row.appendChild(document.createTextNode(item[1]));
+    row.appendChild(document.createTextNode(tr(item[1])));
     var cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.checked = !!state.grid[key];
@@ -2146,7 +2382,7 @@ function buildGridPanel() {
 
   var lead = document.createElement('label');
   lead.className = 'grid-row';
-  lead.appendChild(document.createTextNode('Разбег перед началом'));
+  lead.appendChild(document.createTextNode(tr('lead_in')));
   var lcb = document.createElement('input');
   lcb.type = 'checkbox';
   lcb.checked = !!state.leadIn;
@@ -2165,7 +2401,7 @@ function buildGridPanel() {
   lookRow.className = 'split-row';
   var lookLab = document.createElement('label');
   lookLab.setAttribute('for', 'lookSlider');
-  lookLab.textContent = 'Видно вперёд: ' + lookAheadLabel(state.lookAhead);
+  lookLab.textContent = tr('look_ahead') + lookAheadLabel(state.lookAhead);
   var lookInp = document.createElement('input');
   lookInp.type = 'range';
   lookInp.id = 'lookSlider';
@@ -2175,7 +2411,7 @@ function buildGridPanel() {
   lookInp.value = String(state.lookAhead);
   lookInp.addEventListener('input', function () {
     state.lookAhead = Number(lookInp.value);
-    lookLab.textContent = 'Видно вперёд: ' + lookAheadLabel(state.lookAhead);
+    lookLab.textContent = tr('look_ahead') + lookAheadLabel(state.lookAhead);
     render(getCurrentTime());
     saveSession();
   });
@@ -2185,6 +2421,7 @@ function buildGridPanel() {
 }
 
 function lookAheadLabel(sec) {
+  if (LANG === 'en') return String(sec) + ' s';
   return String(sec).replace('.', ',') + ' с';
 }
 
@@ -2275,7 +2512,7 @@ function applyMidi(fileName, base64, parsedResult, saved) {
     return n.channel !== 9 && n.pitch >= 21 && n.pitch <= 108;
   });
   if (filtered.length === 0) {
-    showError('В файле нет нот, которые можно сыграть на фортепиано.');
+    showError(tr('no_piano_notes'));
     return false;
   }
 
@@ -2309,6 +2546,7 @@ function applyMidi(fileName, base64, parsedResult, saved) {
 
   var auto = autoAssignHands(state.tracks);
   state.handByTrack = auto.map;
+  state.handReason = auto.reason;
   state.splitPitch = 60;
 
   // Тот же файл загрузили заново из «Файлов» — поднимем его поправки
@@ -2336,10 +2574,10 @@ function applyMidi(fileName, base64, parsedResult, saved) {
   // должен быть осмысленным с первого запуска. Повторная загрузка того же
   // имени обновляет запись, дублей не появляется.
   libAdd(fileName, state.fileBase64, state.handByTrack, state.splitPitch);
-  buildHandsPanel(auto.reason);
+  buildHandsPanel();
   buildGridPanel();
   buildSongsPanel();
-  document.getElementById('appVersion').textContent = APP_VERSION;
+  document.getElementById('appVersion').textContent = tr('build_info');
   buildLegend();
 
   fileNameEl.textContent = fileName;
@@ -2386,7 +2624,7 @@ function base64ToArrayBuffer(b64) {
 function loadMidiFile(file) {
   errorState.hidden = true;
   if (!file) {
-    showError('Файл не выбран. Если ничего не открылось — попробуйте ещё раз кнопку «Загрузить MIDI».');
+    showError(tr('no_file'));
     return;
   }
   var reader = new FileReader();
@@ -2399,21 +2637,21 @@ function loadMidiFile(file) {
       var parsed = parseMidi(e.target.result);
       var result = buildNotesFromMidi(parsed);
       if (result.notes.length === 0) {
-        showError('Файл прочитался, но нот в нём не оказалось.');
+        showError(tr('file_no_notes'));
         return;
       }
       if (applyMidi(file.name, base64, result, null)) saveSession();
     } catch (err) {
-      showError(err && err.message ? err.message : 'Файл повреждён или это не MIDI.');
+      showError(err && err.message ? err.message : tr('file_broken'));
     }
   };
   reader.onerror = function () {
-    showError('Не удалось прочитать файл. На iPad такое бывает с файлами из iCloud, которые ещё не скачаны на устройство — откройте файл в «Файлах», дождитесь загрузки и попробуйте снова.');
+    showError(tr('read_failed'));
   };
   try {
     reader.readAsArrayBuffer(file);
   } catch (err) {
-    showError('Браузер не дал прочитать этот файл.');
+    showError(tr('browser_refused'));
   }
 }
 
@@ -2422,9 +2660,9 @@ function loadBuiltIn() {
   try {
     var parsed = parseMidi(base64ToArrayBuffer(BUILT_IN_B64));
     var result = buildNotesFromMidi(parsed);
-    if (applyMidi(BUILT_IN_NAME, BUILT_IN_B64, result, null)) saveSession();
+    if (applyMidi(tr('builtin_name'), BUILT_IN_B64, result, null)) saveSession();
   } catch (e) {
-    showError('Не удалось открыть встроенную пьесу: ' + (e && e.message ? e.message : 'причина неизвестна'));
+    showError(tr('open_builtin_failed') + (e && e.message ? e.message : tr('reason_unknown')));
   }
 }
 
@@ -2506,14 +2744,14 @@ function libAdd(name, b64, hands, split) {
   try {
     localStorage.setItem(SONG_PREFIX + id, b64);
   } catch (quota) {
-    libNote = 'Не хватило места в памяти устройства. Уберите из списка лишние пьесы — и попробуйте снова.';
+    libNote = tr('quota');
     return null;
   }
   items.push({ id: id, name: name, hands: hands || {}, split: split || 60 });
   if (!libWrite(items)) {
     // Индекс не записался — файл без записи в индексе только занимает место
     try { localStorage.removeItem(SONG_PREFIX + id); } catch (e) { /* уже неважно */ }
-    libNote = 'Не хватило места в памяти устройства. Уберите из списка лишние пьесы — и попробуйте снова.';
+    libNote = tr('quota');
     return null;
   }
   libNote = '';
@@ -2547,8 +2785,9 @@ function libRename(id, name) {
   }
   if (was === null) return;
   libWrite(items);
-  // Открытая сейчас пьеса должна переименоваться и на экране, и в сессии
-  if (state.fileLoaded && state.fileName === was) {
+  // Открытая сейчас пьеса должна переименоваться и на экране, и в сессии.
+  // Сверяем и содержимое: у одноимённой чужой пьесы имя на экране не трогаем
+  if (state.fileLoaded && state.fileName === was && libSong(id) === state.fileBase64) {
     state.fileName = name;
     fileNameEl.textContent = name;
     saveSession();
@@ -2562,13 +2801,17 @@ function libRemove(id) {
   libNote = '';
 }
 
-/* Ручные поправки рук живут вместе с пьесой: у каждой свои. */
-function libUpdateHands(name, hands, split) {
+/* Ручные поправки рук живут вместе с пьесой: у каждой свои.
+   Пьесу ищем по имени И содержимому (libFindFor): по одному имени поправки
+   двух одноимённых файлов писались бы в первый попавшийся. */
+function libUpdateHands(name, b64, hands, split) {
   if (!canStore) return;
+  var found = libFindFor(name, b64);
+  if (!found) return;
   var items = libLoad();
   var changed = false;
   for (var i = 0; i < items.length; i++) {
-    if (items[i].name === name) { items[i].hands = hands; items[i].split = split; changed = true; break; }
+    if (items[i].id === found.id) { items[i].hands = hands; items[i].split = split; changed = true; break; }
   }
   if (changed) libWrite(items);
 }
@@ -2577,7 +2820,7 @@ function saveSession() {
   if (!canStore) return;
   // Руки и граница принадлежат пьесе, а не сессии: переключитесь на другую
   // и обратно — расстановка вернётся та, что вы сделали.
-  if (state.fileLoaded) libUpdateHands(state.fileName, state.handByTrack, state.splitPitch);
+  if (state.fileLoaded) libUpdateHands(state.fileName, state.fileBase64, state.handByTrack, state.splitPitch);
   try {
     var payload = {
       v: 2,
@@ -2640,7 +2883,7 @@ function restoreSession() {
   try {
     var parsed = parseMidi(base64ToArrayBuffer(saved.b64));
     var result = buildNotesFromMidi(parsed);
-    if (result.notes.length) applyMidi(saved.name || 'Восстановленный файл', saved.b64, result, saved);
+    if (result.notes.length) applyMidi(saved.name || tr('restored_name'), saved.b64, result, saved);
   } catch (e) { /* мусор в хранилище — начинаем с чистого листа */ }
 }
 
@@ -2800,6 +3043,12 @@ showChromeBtn.addEventListener('click', function () { setChromeHidden(false); })
 
 builtInBtn.addEventListener('click', loadBuiltIn);
 document.getElementById('builtInBtn2').addEventListener('click', loadBuiltIn);
+// Плашку ошибки иначе было не убрать: она висела до первой удачной загрузки.
+// Закрыли — вернулись к открытой пьесе, а без неё — на пустой экран
+document.getElementById('errorCloseBtn').addEventListener('click', function () {
+  errorState.hidden = true;
+  emptyState.hidden = state.fileLoaded;
+});
 playBtn.addEventListener('click', togglePlay);
 restartBtn.addEventListener('click', restart);
 handsBtn.addEventListener('click', function () { setHandsPanelOpen(!panelOpen(handsPanel)); });
@@ -2818,8 +3067,10 @@ function commitSeek() {
   if (!state.fileLoaded) return;
   seekTo(Number(seekBar.value) / 100);
   // document.hidden: приложение свернули прямо во время перетаскивания —
-  // возобновлять нечего, иначе музыка заиграет в фоне, а время убежит
-  if (seekResumeAfter && !document.hidden) play();
+  // возобновлять нечего, иначе музыка заиграет в фоне, а время убежит.
+  // atEnd: у самого конца play() сбросил бы время в ноль и пьеса прыгнула бы
+  // в начало — стоим в конце, как и оставили, см. endGesture
+  if (seekResumeAfter && !document.hidden && !atEnd()) play();
   seekResumeAfter = false;
 }
 seekBar.addEventListener('pointerdown', beginSeekDrag);
@@ -2885,6 +3136,94 @@ if (!state.fileLoaded) loadBuiltIn();
 
 /* Офлайн-режим. На file:// служебный скрипт не регистрируется — это нормально,
    там он и не нужен: страница и так лежит на диске. */
+/* =========================================================
+   Применение языка
+   =========================================================
+   Статика проставляется по id/атрибутам, динамические панели
+   перестраиваются своими build*-функциями. Пропущенная строка не ломает
+   ничего — просто остаётся русской (значения по умолчанию в разметке). */
+function applyStaticTexts() {
+  function setText(id, key) { var el = document.getElementById(id); if (el) el.textContent = tr(key); }
+  function setAttr(id, attr, key) { var el = document.getElementById(id); if (el) el.setAttribute(attr, tr(key)); }
+  emptyState.querySelector('h2').textContent = tr('empty_title');
+  emptyState.querySelector('p').textContent = tr('empty_text');
+  errorState.querySelector('h2').textContent = tr('error_title');
+  setText('builtInBtn', 'open_builtin');
+  setText('builtInBtn2', 'open_builtin');
+  setText('uploadBtn2', 'load_midi');
+  setText('uploadBtn3', 'load_midi');
+  setText('uploadBtn4', 'pick_other');
+  setText('songsBtn2', 'my_pieces');
+  setText('songsBtn3', 'my_pieces');
+  setText('errorCloseBtn', 'close');
+  document.querySelector('#updateBar span').textContent = tr('update_available');
+  setText('updateGo', 'update_go');
+  setAttr('updateHide', 'aria-label', 'close');
+  document.querySelector('#songsPanel .panel-heading').textContent = tr('songs_heading');
+  setAttr('songsClose', 'aria-label', 'close');
+  document.querySelector('#handsPanel .panel-heading').textContent = tr('settings_heading');
+  setAttr('handsClose', 'aria-label', 'close');
+  setText('handsTitleMain', 'hands_title');
+  setText('gridTitle', 'grid_title');
+  setText('langName', 'lang_name');
+  setAttr('appVersion', 'title', 'version_btn_title');
+  var credit = document.getElementById('builtInCredit');
+  if (credit) credit.innerHTML = tr('builtin_credit');
+  setAttr('restartBtn', 'title', 'restart_title');
+  setAttr('restartBtn', 'aria-label', 'restart_title');
+  setAttr('playBtn', 'title', 'play_title');
+  setAttr('playBtn', 'aria-label', 'play_aria');
+  setAttr('seekBar', 'aria-label', 'seek_aria');
+  document.querySelector('label[for="speedSlider"]').textContent = tr('speed');
+  document.querySelector('label[for="volumeSlider"]').textContent = tr('volume');
+  setText('songsBtn', 'pieces_btn');
+  setText('handsBtn', 'settings_btn');
+  setAttr('hideChromeBtn', 'title', 'hide_panels');
+  setAttr('hideChromeBtn', 'aria-label', 'hide_panels');
+  setAttr('showChromeBtn', 'aria-label', 'show_panels');
+}
+
+/* Кнопки выбора языка. Каждый язык подписан на себе самом —
+   иначе не найти родной среди чужих букв. */
+function buildLangRow() {
+  var box = document.getElementById('langToggle');
+  if (!box) return;
+  box.innerHTML = '';
+  [['ru', 'Русский'], ['en', 'English']].forEach(function (pair) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = pair[1];
+    if (LANG === pair[0]) b.className = 'on';
+    b.addEventListener('click', function () { setLang(pair[0]); });
+    box.appendChild(b);
+  });
+}
+
+function applyLanguage() {
+  document.documentElement.lang = LANG;
+  document.title = tr('doc_title');
+  var meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (meta) meta.setAttribute('content', tr('app_name'));
+  applyStaticTexts();
+  buildLangRow();
+  buildLegend();
+  buildGridPanel();
+  buildSongsPanel();
+  if (state.fileLoaded) buildHandsPanel();
+  document.getElementById('appVersion').textContent = tr('build_info');
+}
+
+function setLang(l) {
+  if (!STR[l] || l === LANG) return;
+  LANG = l;
+  try { localStorage.setItem(LANG_KEY, l); } catch (e) { /* без памяти — до перезапуска */ }
+  applyLanguage();
+}
+
+/* Первый прогон: для русского всё совпадает с разметкой и просто
+   подтверждается, для английского — переписывается. */
+applyLanguage();
+
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').catch(function () { /* без офлайна тоже работает */ });

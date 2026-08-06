@@ -1,35 +1,82 @@
-# Падающие ноты
+# Falling Notes
 
-Тренажёр игры на фортепиано по MIDI-файлам. Ноты падают сверху к нарисованной клавиатуре, левая и правая рука разделены цветом, звук синтезируется браузером. Один HTML-файл без внешних зависимостей — работает офлайн.
+**[Русская версия →](README.ru.md)**
 
-## Возможности
+A piano practice trainer that plays MIDI files as falling notes. Notes stream down toward an on-screen keyboard — play each one as it reaches the light line. Left and right hands are colour-coded, sound is synthesised by the browser itself.
 
-- Свой парсер MIDI (формат 0 и 1), без библиотек
-- Разделение рук: по именам треков в файле, а если их нет — по средней высоте треков; любое назначение можно поправить вручную
-- Транспорт: играть/пауза, перемотка, скорость 25–150 % без изменения высоты звука, громкость
-- Загруженный файл и настройка рук сохраняются между запусками
-- Добавляется на домашний экран iPad как отдельное приложение, дальше работает без интернета
+One HTML file, no dependencies, no build step, no server. Works offline.
 
-## Встроенная пьеса
+**Try it live: [belf186.github.io/falling-notes](https://belf186.github.io/falling-notes/)**
 
-Бетховен, Соната № 14 до-диез минор, соч. 27 № 2 («Лунная»), первая часть.
+![Falling Notes in action](screenshots/play-en.png)
 
-MIDI-файл: [piano-midi.de](http://www.piano-midi.de), автор записи — Бернд Крюгер (Bernd Krueger), редакция 2012-06-03.
-Лицензия: **Creative Commons Attribution-ShareAlike (CC BY-SA)**. Файл включён в `index.html` в неизменном виде и распространяется на тех же условиях.
+## Features
 
-## Файлы
+- **Own MIDI parser** (format 0 and 1) — no libraries, understands tempo maps and time signatures
+- **Hand separation**: detected from track names (six languages of common naming), or by average track pitch when names give nothing; single-track files are split by a pitch boundary you can drag. Any assignment can be overridden per track — your corrections are remembered per piece
+- **Transport**: play/pause, seek, playback speed 25–150 % without pitch change, volume
+- **Grid**: bar lines and beat lines (metre is read from the MIDI itself), octave boundaries, black-key columns — each one optional
+- **Lead-in** before the first note, so the piece does not start point-blank
+- **Piece library**: loaded files are stored on the device and switch with one tap
+- **Keys-only mode**: hide every panel and give the whole screen to the notes
+- **Interface in English and Russian** — switch anytime in Settings
+- **Installs as an app** on iPad (Add to Home Screen), then works fully offline
 
-| Файл | Назначение |
+## Gestures
+
+| Gesture | Action |
 |---|---|
-| `index.html` | Само приложение целиком, включая встроенную пьесу |
-| `sw.js` | Офлайн-кэш (service worker) |
-| `manifest.webmanifest` | Описание приложения для домашнего экрана |
-| `icon-*.png` | Иконки |
+| Short tap on the note field | Play / pause |
+| Drag on the note field | Seek. Drag up — back in time, as if holding the note ribbon itself |
+| Space / Home / ← → | Play-pause / to the beginning / ±5 s |
 
-## Обновление
+Panels hide with the button in the bottom-right corner of the transport and come back with the round button in the screen corner.
 
-Заменить `index.html` новой версией — этого достаточно: стратегия кэша «сеть вперёд», при живом интернете приложение всегда берёт свежий файл, а старая копия служит только запасной на случай отсутствия сети.
+![Keys-only mode](screenshots/keys-only-en.png)
 
-Поднимать `VERSION` в `sw.js` нужно, только если менялись сам `sw.js`, манифест или иконки: они лежат в предзагруженном списке `ASSETS` и обновляются вместе со сменой версии кэша.
+## Hands, grid and language
 
-GitHub Pages отдаёт статику с `Cache-Control: max-age=600`, поэтому свежая версия иногда доезжает не с первой попытки — достаточно открыть приложение повторно.
+Everything lives in one Settings panel: per-track hand toggles with note counts and ranges, grid switches, look-ahead depth, interface language.
+
+![Settings panel](screenshots/settings-en.png)
+
+## Try it
+
+Open the app in any modern browser — or install it on a tablet:
+
+1. Open the page in Safari on iPad
+2. Share button → **Add to Home Screen**
+3. Launch from the icon: full screen, no address bar, works without internet
+
+On Android and desktop the same works in Chrome: menu ⋮ → “Add to Home screen” on a phone, or the install icon in the address bar on a computer.
+
+To load your own music, tap **Load MIDI** and pick any `.mid` / `.midi` file — or just drag one onto the page on a computer.
+
+## Built-in piece
+
+Beethoven — Sonata No. 14 in C-sharp minor, Op. 27 No. 2 (“Moonlight”), 1st movement.
+
+MIDI file: [piano-midi.de](http://www.piano-midi.de), recorded by Bernd Krueger, edition 2012-06-03.
+License: **Creative Commons Attribution-ShareAlike (CC BY-SA)**. The file is embedded in `index.html` unchanged and is distributed under the same terms.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `index.html` | The whole app, built-in piece included |
+| `sw.js` | Offline cache (service worker) |
+| `manifest.webmanifest` | Home-screen app description |
+| `icon-*.png` | Icons |
+| `screenshots/` | Images for this page |
+
+## Updating a self-hosted copy
+
+Replace `index.html` with the new version — that is enough: the cache strategy is network-first, so with a live connection the app always takes the fresh file, and the cached copy only serves as a fallback when offline.
+
+Bump `VERSION` in `sw.js` only when `sw.js` itself, the manifest or the icons change: those live in the pre-cached `ASSETS` list and refresh together with the cache version.
+
+GitHub Pages serves static files with `Cache-Control: max-age=600`, so a fresh version sometimes takes a second visit to arrive — just open the app again.
+
+## License
+
+The application code is available under the MIT license. The embedded Moonlight Sonata MIDI remains under CC BY-SA (see above).
