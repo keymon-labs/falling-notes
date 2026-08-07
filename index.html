@@ -728,6 +728,9 @@
         <div class="panel-foot">
           <button class="btn btn-primary" id="uploadBtn2" type="button">Загрузить MIDI</button>
         </div>
+        <div class="panel-note">
+          <span id="midiSources">Где брать MIDI: <a href="http://piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a> · <a href="https://www.mutopiaproject.org" target="_blank" rel="noopener">Mutopia</a> · <a href="https://www.pandatooth.com/sheet-music/" target="_blank" rel="noopener">ThePandaTooth</a> · <a href="https://bitmidi.com" target="_blank" rel="noopener">BitMidi</a></span>
+        </div>
       </section>
 
       <section class="hands-panel is-off" id="handsPanel" hidden>
@@ -752,7 +755,8 @@
           <button class="version-btn" id="appVersion" type="button" title="Показать размеры экрана"></button><br>
           <span id="metrics" hidden></span>
           <span id="builtInCredit">Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер,
-          <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.</span>
+          <a href="http://piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.</span><br>
+          <span id="sourceLink">Исходный код: <a href="https://github.com/Belf186/falling-notes" target="_blank" rel="noopener">github.com/Belf186/falling-notes</a>, лицензия MIT</span>
         </div>
       </section>
 
@@ -869,7 +873,7 @@ var STR = {
   ru: {
     app_name: 'Падающие ноты',
     doc_title: 'Падающие ноты — тренажёр по MIDI',
-    build_info: 'сборка 8 · 6 августа 2026',
+    build_info: 'сборка 9 · 7 августа 2026',
     builtin_name: 'Лунная соната',
     empty_title: 'Загрузите MIDI-файл, чтобы начать',
     empty_text: 'Ноты полетят вниз к клавиатуре — играйте, когда они долетают до светлой линии. Подойдёт любой файл .mid или .midi; на компьютере можно перетащить его прямо сюда.',
@@ -887,7 +891,9 @@ var STR = {
     grid_title: 'Сетка',
     lang_name: 'Язык интерфейса',
     version_btn_title: 'Показать размеры экрана',
-    builtin_credit: 'Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер, <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.',
+    builtin_credit: 'Встроенная пьеса: Бетховен, Соната №14, 1 часть. MIDI — Бернд Крюгер, <a href="http://piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, лицензия CC BY-SA.',
+    midi_sources: 'Где брать MIDI: <a href="http://piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a> · <a href="https://www.mutopiaproject.org" target="_blank" rel="noopener">Mutopia</a> · <a href="https://www.pandatooth.com/sheet-music/" target="_blank" rel="noopener">ThePandaTooth</a> · <a href="https://bitmidi.com" target="_blank" rel="noopener">BitMidi</a>',
+    source_link: 'Исходный код: <a href="https://github.com/Belf186/falling-notes" target="_blank" rel="noopener">github.com/Belf186/falling-notes</a>, лицензия MIT',
     restart_title: 'В начало',
     play_title: 'Играть / пауза',
     play_aria: 'Играть или пауза',
@@ -951,7 +957,7 @@ var STR = {
   en: {
     app_name: 'Falling Notes',
     doc_title: 'Falling Notes — a MIDI practice trainer',
-    build_info: 'build 8 · August 6, 2026',
+    build_info: 'build 9 · August 7, 2026',
     builtin_name: 'Moonlight Sonata',
     empty_title: 'Load a MIDI file to get started',
     empty_text: 'Notes will fall down toward the keyboard — play each one as it reaches the light line. Any .mid or .midi file will do; on a computer you can also drop one right here.',
@@ -969,7 +975,9 @@ var STR = {
     grid_title: 'Grid',
     lang_name: 'Interface language',
     version_btn_title: 'Show screen dimensions',
-    builtin_credit: 'Built-in piece: Beethoven, Sonata No. 14, 1st movement. MIDI by Bernd Krueger, <a href="http://www.piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, licensed CC BY-SA.',
+    builtin_credit: 'Built-in piece: Beethoven, Sonata No. 14, 1st movement. MIDI by Bernd Krueger, <a href="http://piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a>, licensed CC BY-SA.',
+    midi_sources: 'Where to get MIDI: <a href="http://piano-midi.de" target="_blank" rel="noopener">piano-midi.de</a> · <a href="https://www.mutopiaproject.org" target="_blank" rel="noopener">Mutopia</a> · <a href="https://www.pandatooth.com/sheet-music/" target="_blank" rel="noopener">ThePandaTooth</a> · <a href="https://bitmidi.com" target="_blank" rel="noopener">BitMidi</a>',
+    source_link: 'Source code: <a href="https://github.com/Belf186/falling-notes" target="_blank" rel="noopener">github.com/Belf186/falling-notes</a>, MIT licence',
     restart_title: 'To the beginning',
     play_title: 'Play / pause',
     play_aria: 'Play or pause',
@@ -3169,6 +3177,10 @@ function applyStaticTexts() {
   setAttr('appVersion', 'title', 'version_btn_title');
   var credit = document.getElementById('builtInCredit');
   if (credit) credit.innerHTML = tr('builtin_credit');
+  var srcMidi = document.getElementById('midiSources');
+  if (srcMidi) srcMidi.innerHTML = tr('midi_sources');
+  var srcCode = document.getElementById('sourceLink');
+  if (srcCode) srcCode.innerHTML = tr('source_link');
   setAttr('restartBtn', 'title', 'restart_title');
   setAttr('restartBtn', 'aria-label', 'restart_title');
   setAttr('playBtn', 'title', 'play_title');

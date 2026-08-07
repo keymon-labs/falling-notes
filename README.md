@@ -52,11 +52,26 @@ On Android and desktop the same works in Chrome: menu ⋮ → “Add to Home scr
 
 To load your own music, tap **Load MIDI** and pick any `.mid` / `.midi` file — or just drag one onto the page on a computer.
 
+## Where to get MIDI files
+
+The app plays any standard MIDI file. Places worth checking:
+
+| Source | What is there |
+|---|---|
+| [piano-midi.de](http://piano-midi.de) | Classical piano, hands already marked in the track names, CC BY-SA. The site only opens **without** `www` |
+| [Mutopia Project](https://www.mutopiaproject.org) | Typeset from sheet music, free licences, clean note-offs |
+| [ThePandaTooth](https://www.pandatooth.com/sheet-music/) | Piano arrangements of film and game music, made by a pianist — often with a `Left Hand` track |
+| [BitMidi](https://bitmidi.com) | Over a hundred thousand files, almost anything you can name |
+
+One thing to watch for: a file written for orchestral playback — many instruments spread
+across separate tracks — will load and play, but it is not a piano part and looks like a
+wall of notes. On the bigger archives, prefer files that say "piano" in the name.
+
 ## Built-in piece
 
 Beethoven — Sonata No. 14 in C-sharp minor, Op. 27 No. 2 (“Moonlight”), 1st movement.
 
-MIDI file: [piano-midi.de](http://www.piano-midi.de), recorded by Bernd Krueger, edition 2012-06-03.
+MIDI file: [piano-midi.de](http://piano-midi.de), recorded by Bernd Krueger, edition 2012-06-03.
 License: **Creative Commons Attribution-ShareAlike (CC BY-SA)**. The file is embedded in `index.html` unchanged and is distributed under the same terms.
 
 ## Files
