@@ -2051,6 +2051,7 @@ function liveNoteOn(pitch, velocity) {
   heldKeys[pitch] = true;
   delete sustainedKeys[pitch];
   liveKeys[pitch] = true;
+  if (typeof waitOnPitch === 'function') waitOnPitch(pitch);
   redrawLive();
 }
 
