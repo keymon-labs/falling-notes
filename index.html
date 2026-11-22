@@ -764,6 +764,10 @@
         <div class="panel-foot">
           <button class="btn btn-ghost" id="midiConnectBtn" type="button">Подключить</button>
         </div>
+        <div class="panel-foot">
+          <button class="btn btn-ghost" id="bleConnectBtn" type="button" hidden>Bluetooth напрямую</button>
+        </div>
+        <p class="hands-hint" id="bleStatus" hidden></p>
         <p class="hands-hint" id="midiHint"></p>
         <p class="hands-title panel-gap">Язык · Language</p>
         <div class="hand-row">
@@ -985,6 +989,11 @@ var STR = {
     midi_no_devices: 'Устройств не найдено. Подключите клавиатуру по USB или Bluetooth.',
     midi_connected: 'Подключено: {name}',
     midi_choose: 'Выберите устройство в списке.',
+    ble_connect: 'Bluetooth напрямую',
+    ble_connected: 'Bluetooth: {name}',
+    ble_failed: 'Не удалось подключиться по Bluetooth.',
+    ble_lost: 'Bluetooth-клавиатура отключилась.',
+    ble_hint: 'Если клавиатуры нет в списке, подключите её напрямую по Bluetooth LE.',
     midi_hint_android: 'Android и Bluetooth: сначала соедините клавиатуру в бесплатном приложении-мосте, например MIDI BLE Connect, затем нажмите «Подключить».',
     m_screen: 'экран',
     m_window: 'окно',
@@ -1084,6 +1093,11 @@ var STR = {
     midi_no_devices: 'No devices found. Connect the keyboard over USB or Bluetooth.',
     midi_connected: 'Connected: {name}',
     midi_choose: 'Pick a device from the list.',
+    ble_connect: 'Bluetooth directly',
+    ble_connected: 'Bluetooth: {name}',
+    ble_failed: 'Could not connect over Bluetooth.',
+    ble_lost: 'The Bluetooth keyboard disconnected.',
+    ble_hint: 'If the keyboard is not in the list, connect it directly over Bluetooth LE.',
     midi_hint_android: 'Android over Bluetooth: first pair the keyboard in a free bridge app such as MIDI BLE Connect, then press Connect.',
     m_screen: 'screen',
     m_window: 'window',
@@ -2177,6 +2191,124 @@ document.getElementById('midiSelect').addEventListener('change', function (e) {
   midiInputList().forEach(function (inp) { if (inp.id === id) found = inp; });
   selectMidiInput(found);
 });
+
+/* BLE-MIDI-PARSER:START */
+function bleMidiDataLength(status) {
+  var c = status & 0xF0;
+  return (c === 0xC0 || c === 0xD0) ? 1 : 2;
+}
+
+/* Разбирает один пакет BLE-MIDI в сообщения. Возвращает статус для running status,
+   его нужно передать в разбор следующего пакета. */
+function parseBleMidi(bytes, runningStatus) {
+  var out = [];
+  var status = runningStatus || 0;
+  var len = bytes ? bytes.length : 0;
+  if (len < 2 || !(bytes[0] & 0x80)) return { messages: out, status: status };
+  var i = 1;
+  while (i < len) {
+    var b = bytes[i];
+    if (b & 0x80) {
+      i++;
+      if (i >= len) break;
+      b = bytes[i];
+      if (b & 0x80) {
+        i++;
+        if (b === 0xF0) {
+          while (i < len && bytes[i] !== 0xF7) i++;
+          i++;
+          status = 0;
+          continue;
+        }
+        if (b >= 0xF8) { out.push([b]); continue; }
+        if (b >= 0xF1) {
+          var skip = (b === 0xF2) ? 2 : (b === 0xF1 || b === 0xF3) ? 1 : 0;
+          i += skip;
+          status = 0;
+          continue;
+        }
+        status = b;
+      }
+    }
+    if (!status) { i++; continue; }
+    var need = bleMidiDataLength(status);
+    var msg = [status];
+    while (msg.length <= need && i < len && !(bytes[i] & 0x80)) msg.push(bytes[i++]);
+    if (msg.length === need + 1) out.push(msg);
+  }
+  return { messages: out, status: status };
+}
+/* BLE-MIDI-PARSER:END */
+
+var BLE_MIDI_SERVICE = '03b80e5a-ede8-4b33-a751-6ca34ec4c700';
+var BLE_MIDI_CHARACTERISTIC = '7772e5db-3868-4112-a1a9-f2669d106bf3';
+var bleDevice = null;
+var bleStatusKey = '';
+var bleRunningStatus = 0;
+
+function bleSupported() {
+  return !!(navigator && navigator.bluetooth && typeof navigator.bluetooth.requestDevice === 'function');
+}
+
+function refreshBleStatus() {
+  var btn = document.getElementById('bleConnectBtn');
+  var statusEl = document.getElementById('bleStatus');
+  if (!btn) return;
+  var connected = !!(bleDevice && bleDevice.gatt && bleDevice.gatt.connected);
+  var text = '';
+  if (bleSupported()) {
+    if (connected) text = trf('ble_connected', bleDevice.name || '');
+    else if (bleStatusKey) text = tr(bleStatusKey);
+    else text = tr('ble_hint');
+  }
+  btn.hidden = !bleSupported();
+  statusEl.textContent = text;
+  statusEl.hidden = !text;
+}
+
+function onBleValue(e) {
+  var v = e.target.value;
+  var r = parseBleMidi(new Uint8Array(v.buffer, v.byteOffset, v.byteLength), bleRunningStatus);
+  bleRunningStatus = r.status;
+  r.messages.forEach(handleMidiBytes);
+}
+
+function onBleDisconnected() {
+  bleStatusKey = 'ble_lost';
+  bleRunningStatus = 0;
+  clearLiveKeys();
+  refreshBleStatus();
+}
+
+function connectBle() {
+  if (!bleSupported()) return;
+  bleStatusKey = '';
+  navigator.bluetooth.requestDevice({
+    filters: [{ services: [BLE_MIDI_SERVICE] }],
+    optionalServices: [BLE_MIDI_SERVICE]
+  }).then(function (dev) {
+    if (bleDevice) bleDevice.removeEventListener('gattserverdisconnected', onBleDisconnected);
+    bleDevice = dev;
+    dev.addEventListener('gattserverdisconnected', onBleDisconnected);
+    return dev.gatt.connect();
+  }).then(function (server) {
+    return server.getPrimaryService(BLE_MIDI_SERVICE);
+  }).then(function (service) {
+    return service.getCharacteristic(BLE_MIDI_CHARACTERISTIC);
+  }).then(function (ch) {
+    bleRunningStatus = 0;
+    ch.addEventListener('characteristicvaluechanged', onBleValue);
+    return ch.startNotifications();
+  }).then(function () {
+    refreshBleStatus();
+  }, function (err) {
+    // NotFoundError: человек закрыл окно выбора, ошибкой это не считаем
+    if (!err || err.name !== 'NotFoundError') bleStatusKey = 'ble_failed';
+    refreshBleStatus();
+  });
+}
+
+document.getElementById('bleConnectBtn').addEventListener('click', connectBle);
 
 /* =========================================================
    5c. Режим ожидания
@@ -3534,6 +3666,8 @@ function applyStaticTexts() {
   setText('gridTitle', 'grid_title');
   setText('midiTitle', 'midi_title');
   setText('midiConnectBtn', 'midi_connect');
+  setText('bleConnectBtn', 'ble_connect');
+  refreshBleStatus();
   setText('midiHint', 'midi_hint_android');
   setAttr('midiSelect', 'aria-label', 'midi_pick');
   refreshMidiStatus();
