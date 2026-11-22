@@ -47,6 +47,10 @@ Open Settings, press **Connect** in the MIDI keyboard section, allow access and 
 
 Web MIDI works in Chrome and Edge on desktop and Android. Safari on iPhone and iPad does not support it. On Android over Bluetooth, pair the keyboard first in a free bridge app such as MIDI BLE Connect, then press Connect. Not every device has been tested.
 
+If Web MIDI does not list the keyboard, the **Bluetooth directly** button connects a BLE-MIDI keyboard through Web Bluetooth (Chrome on desktop and Android). It is only shown in browsers that support Web Bluetooth.
+
+The packet parser is a pure function with Node tests: `node --test tests/*.test.js`.
+
 ## Try it
 
 Open the app in any modern browser — or install it on a tablet:
