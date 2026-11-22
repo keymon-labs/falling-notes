@@ -19,6 +19,7 @@ One HTML file, no dependencies, no build step, no server. Works offline.
 - **Lead-in** before the first note, so the piece does not start point-blank
 - **Piece library**: loaded files are stored on the device and switch with one tap
 - **Keys-only mode**: hide every panel and give the whole screen to the notes
+- **MIDI keyboard input** (Web MIDI): your playing sounds and lights the on-screen keys
 - **Interface in English and Russian** — switch anytime in Settings
 - **Installs as an app** on iPad (Add to Home Screen), then works fully offline
 
@@ -39,6 +40,12 @@ Panels hide with the button in the bottom-right corner of the transport and come
 Everything lives in one Settings panel: per-track hand toggles with note counts and ranges, grid switches, look-ahead depth, interface language.
 
 ![Settings panel](screenshots/settings-en.png)
+
+## Playing a MIDI keyboard
+
+Open Settings, press **Connect** in the MIDI keyboard section, allow access and pick your device. Notes you play sound through the built-in synth and light the on-screen keys; the sustain pedal (CC64) is supported and devices can be plugged in or out at any time.
+
+Web MIDI works in Chrome and Edge on desktop and Android. Safari on iPhone and iPad does not support it. On Android over Bluetooth, pair the keyboard first in a free bridge app such as MIDI BLE Connect, then press Connect. Not every device has been tested.
 
 ## Try it
 
@@ -94,4 +101,4 @@ GitHub Pages serves static files with `Cache-Control: max-age=600`, so a fresh v
 
 ## License
 
-The application code is available under the MIT license. The embedded Moonlight Sonata MIDI remains under CC BY-SA (see above).
+The application code is available under the MIT license. Original app by [Belf186](https://github.com/Belf186/falling-notes); this fork adds MIDI keyboard input. The embedded Moonlight Sonata MIDI remains under CC BY-SA (see above).
