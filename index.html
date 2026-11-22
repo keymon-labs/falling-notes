@@ -509,6 +509,8 @@
   .hand-toggle button:first-child { border-radius: 9px 0 0 9px; }
   .hand-toggle button:last-child { border-radius: 0 9px 9px 0; border-left: none; }
   .hand-toggle button.on[data-hand="right"] { background: var(--gold); color: #1a1408; border-color: var(--gold); font-weight: 600; }
+  .hand-toggle button:not(:first-child) { border-left: none; }
+  .hand-toggle button.on[data-hand="both"] { background: var(--ivory); color: #1a1408; border-color: var(--ivory); font-weight: 600; }
   .hand-toggle button.on[data-hand="left"] { background: var(--silver-blue); color: #0a1420; border-color: var(--silver-blue); font-weight: 600; }
 
   .split-row { padding-top: 10px; border-top: 1px solid var(--border); }
@@ -741,6 +743,8 @@
         <p class="hands-title" id="handsTitleMain">Руки</p>
         <p class="hands-hint" id="handsHint"></p>
         <div id="handsRows"></div>
+        <p class="hands-title panel-gap" id="waitTitle">Режим ожидания</p>
+        <div id="waitRows"></div>
         <p class="hands-title panel-gap" id="gridTitle">Сетка</p>
         <div id="gridRows"></div>
         <p class="hands-title panel-gap">Язык · Language</p>
@@ -924,6 +928,11 @@ var STR = {
     grid_octaves: 'Границы октав',
     grid_black: 'Столбцы чёрных клавиш',
     lead_in: 'Разбег перед началом',
+    wait_title: 'Режим ожидания',
+    wait_enable: 'Ждать мою игру',
+    wait_hand: 'Чью партию ждать',
+    wait_both: 'Обе',
+    wait_hint: 'Пьеса останавливается на ближайшей ноте и идёт дальше, когда вы её сыграли. В аккорде нужны все ноты. Ошибки не считаются и ничем не наказываются. Руки берутся из блока «Руки» выше: у файла с несколькими треками по трекам, у файла с одним треком по границе высоты. Ноты нужно играть с MIDI-клавиатуры.',
     look_ahead: 'Видно вперёд: ',
     songs_hint_default: 'Тап по названию — открыть. Карандаш — переименовать. Крестик — убрать из списка.',
     songs_hint_empty: 'Пока пусто. Загруженные файлы будут появляться здесь — и переключаться одним касанием, без похода в «Файлы».',
@@ -1008,6 +1017,11 @@ var STR = {
     grid_octaves: 'Octave boundaries',
     grid_black: 'Black-key columns',
     lead_in: 'Lead-in before the start',
+    wait_title: 'Wait mode',
+    wait_enable: 'Wait for my playing',
+    wait_hand: 'Hand to wait for',
+    wait_both: 'Both',
+    wait_hint: 'The piece stops at the next note and goes on once you play it. A chord needs all of its notes. Mistakes are not counted and never punished. Hands come from the Hands section above: from the tracks in a multi-track file, by the pitch boundary in a one-track file. Notes must be played on a MIDI keyboard.',
     look_ahead: 'Visible ahead: ',
     songs_hint_default: 'Tap a title to open it. The pencil renames, the cross removes it from the list.',
     songs_hint_empty: 'Nothing here yet. Loaded files will appear in this list — and switch with a single tap, no trip to the Files app.',
@@ -1972,10 +1986,156 @@ function playNote(pitch, velocity, durationSec) {
 }
 
 /* =========================================================
+   5c. Режим ожидания
+   ========================================================= */
+/* WAIT-MODE-LOGIC:START */
+var WAIT_CHORD_EPS = 0.03;
+var WAIT_EARLY_SEC = 0.6;
+
+function waitHandWants(setting, hand) {
+  return setting === 'both' || setting === hand;
+}
+
+function waitFindGroup(notes, fromIdx, wants) {
+  var i = fromIdx;
+  while (i < notes.length && !wants(notes[i])) i++;
+  if (i >= notes.length) return null;
+  var time = notes[i].startTime;
+  var pitches = [];
+  var j = i;
+  for (; j < notes.length && notes[j].startTime <= time + WAIT_CHORD_EPS; j++) {
+    if (wants(notes[j]) && pitches.indexOf(notes[j].pitch) < 0) pitches.push(notes[j].pitch);
+  }
+  return { time: time, pitches: pitches, remaining: pitches.slice(), endIdx: j };
+}
+
+function waitPress(remaining, pitch) {
+  var k = remaining.indexOf(pitch);
+  if (k < 0) return remaining;
+  return remaining.slice(0, k).concat(remaining.slice(k + 1));
+}
+
+function waitIsOpen(group, t) {
+  return t >= group.time - WAIT_EARLY_SEC;
+}
+/* WAIT-MODE-LOGIC:END */
+
+state.wait = { on: false, hand: 'both' };
+var waitGroup = null;
+var waitHold = null;
+var waitDoneIdx = 0;
+
+function waitWantsNote(n) {
+  return waitHandWants(state.wait.hand, handOfNote(n));
+}
+
+function waitSearch() {
+  return waitFindGroup(state.notes, Math.max(state.nextTriggerIdx, waitDoneIdx), waitWantsNote);
+}
+
+function waitUnfreeze() {
+  if (waitHold === null) return;
+  state.startOffset = waitHold;
+  state.startTimestamp = performance.now();
+  waitHold = null;
+}
+
+function waitRelease() {
+  waitUnfreeze();
+  waitGroup = null;
+}
+
+function waitReset() {
+  waitRelease();
+  waitDoneIdx = 0;
+}
+
+/* Кадр плеера: если ждущая нота дошла до линии, время встаёт на ней */
+function waitGate(t) {
+  if (!state.wait.on) return t;
+  if (waitHold !== null) return waitHold;
+  if (!waitGroup) waitGroup = waitSearch();
+  if (waitGroup && t >= waitGroup.time) {
+    waitHold = waitGroup.time;
+    return waitHold;
+  }
+  return t;
+}
+
+/* Сюда приходит каждая нота, сыгранная пользователем (MIDI-вход зовёт эту функцию) */
+function waitOnPitch(pitch) {
+  if (!state.wait.on || !state.fileLoaded) return;
+  if (!waitGroup) waitGroup = waitSearch();
+  if (!waitGroup || !waitIsOpen(waitGroup, getCurrentTime())) return;
+  waitGroup.remaining = waitPress(waitGroup.remaining, pitch);
+  if (waitGroup.remaining.length > 0) return;
+  waitDoneIdx = waitGroup.endIdx;
+  waitRelease();
+}
+
+function setWaitMode(on) {
+  state.wait.on = on;
+  waitReset();
+}
+
+function buildWaitPanel() {
+  var box = document.getElementById('waitRows');
+  if (!box) return;
+  box.innerHTML = '';
+
+  var row = document.createElement('label');
+  row.className = 'grid-row';
+  row.appendChild(document.createTextNode(tr('wait_enable')));
+  var cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.id = 'waitToggle';
+  cb.checked = state.wait.on;
+  cb.addEventListener('change', function () { setWaitMode(cb.checked); });
+  row.appendChild(cb);
+  box.appendChild(row);
+
+  var handRow = document.createElement('div');
+  handRow.className = 'hand-row';
+  var info = document.createElement('div');
+  info.className = 'hand-info';
+  var nameEl = document.createElement('span');
+  nameEl.className = 'hand-name';
+  nameEl.textContent = tr('wait_hand');
+  info.appendChild(nameEl);
+  var toggle = document.createElement('div');
+  toggle.className = 'hand-toggle';
+  toggle.id = 'waitHand';
+  [['left', tr('left_hand')], ['both', tr('wait_both')], ['right', tr('right_hand')]].forEach(function (pair) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.hand = pair[0];
+    b.textContent = pair[1];
+    if (state.wait.hand === pair[0]) b.className = 'on';
+    b.addEventListener('click', function () {
+      state.wait.hand = pair[0];
+      waitReset();
+      Array.prototype.forEach.call(toggle.children, function (c) {
+        c.className = c.dataset.hand === pair[0] ? 'on' : '';
+      });
+    });
+    toggle.appendChild(b);
+  });
+  handRow.appendChild(info);
+  handRow.appendChild(toggle);
+  box.appendChild(handRow);
+
+  var hint = document.createElement('p');
+  hint.className = 'hands-hint';
+  hint.textContent = tr('wait_hint');
+  box.appendChild(hint);
+}
+
+/* =========================================================
    6. Плеер / транспорт
    ========================================================= */
 function getCurrentTime() {
   if (!state.isPlaying) return state.currentTimeCache;
+  if (waitHold !== null) return waitHold;
   var elapsed = ((performance.now() - state.startTimestamp) / 1000) * state.speed;
   return state.startOffset + elapsed;
 }
@@ -1992,7 +2152,8 @@ function tickAudioTriggers(currentTime) {
   while (state.nextTriggerIdx < state.notes.length && state.notes[state.nextTriggerIdx].startTime <= currentTime) {
     var n = state.notes[state.nextTriggerIdx];
     // Если кадры пропали (свернули приложение) — не вываливать залп опоздавших нот
-    if (currentTime - n.startTime < 0.25) {
+    var playedByUser = state.wait.on && waitWantsNote(n);
+    if (!playedByUser && currentTime - n.startTime < 0.25) {
       playNote(n.pitch, n.velocity, (n.endTime - n.startTime) / state.speed);
     }
     state.nextTriggerIdx++;
@@ -2005,6 +2166,7 @@ function play() {
   if (state.currentTimeCache >= state.totalDuration - 0.01) {
     state.currentTimeCache = 0;
     resyncTriggerPointer(0);
+    waitReset();
   }
   state.startTimestamp = performance.now();
   state.startOffset = state.currentTimeCache;
@@ -2033,6 +2195,7 @@ function seekTo(t) {
   // Хвост нот из прежнего места не должен накладываться на новое
   if (Math.abs(t - state.currentTimeCache) > 0.05) stopAllNotes();
   state.currentTimeCache = t;
+  waitReset();
   if (state.isPlaying) {
     state.startOffset = t;
     state.startTimestamp = performance.now();
@@ -2079,7 +2242,7 @@ function setSpeed(pct) {
 
 function loop(token) {
   if (!state.isPlaying || token !== state.loopToken) return;
-  var t = getCurrentTime();
+  var t = waitGate(getCurrentTime());
   if (t >= state.totalDuration) {
     state.isPlaying = false;
     state.currentTimeCache = state.totalDuration;
@@ -2154,6 +2317,7 @@ function buildHandsPanel() {
     inp.value = String(state.splitPitch);
     inp.addEventListener('input', function () {
       state.splitPitch = Number(inp.value);
+      waitRelease();
       lab.textContent = tr('split_label') + noteLabel(state.splitPitch);
       render(getCurrentTime());
       saveSession();
@@ -2191,6 +2355,7 @@ function buildHandsPanel() {
       if (state.handByTrack[t.index] === pair[0]) b.className = 'on';
       b.addEventListener('click', function () {
         state.handByTrack[t.index] = pair[0];
+        waitRelease();
         Array.prototype.forEach.call(toggle.children, function (c) {
           c.className = c.dataset.hand === pair[0] ? 'on' : '';
         });
@@ -2578,6 +2743,7 @@ function applyMidi(fileName, base64, parsedResult, saved) {
   setLeadIn(desiredLeadIn());
   state.currentTimeCache = 0;
   resyncTriggerPointer(0);
+  waitReset();
   // В библиотеку кладём любую открытую пьесу, включая встроенную: список
   // должен быть осмысленным с первого запуска. Повторная загрузка того же
   // имени обновляет запись, дублей не появляется.
@@ -3173,6 +3339,7 @@ function applyStaticTexts() {
   setAttr('handsClose', 'aria-label', 'close');
   setText('handsTitleMain', 'hands_title');
   setText('gridTitle', 'grid_title');
+  setText('waitTitle', 'wait_title');
   setText('langName', 'lang_name');
   setAttr('appVersion', 'title', 'version_btn_title');
   var credit = document.getElementById('builtInCredit');
@@ -3220,6 +3387,7 @@ function applyLanguage() {
   buildLangRow();
   buildLegend();
   buildGridPanel();
+  buildWaitPanel();
   buildSongsPanel();
   if (state.fileLoaded) buildHandsPanel();
   document.getElementById('appVersion').textContent = tr('build_info');

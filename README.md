@@ -15,6 +15,7 @@ One HTML file, no dependencies, no build step, no server. Works offline.
 - **Own MIDI parser** (format 0 and 1) — no libraries, understands tempo maps and time signatures
 - **Hand separation**: detected from track names (six languages of common naming), or by average track pitch when names give nothing; single-track files are split by a pitch boundary you can drag. Any assignment can be overridden per track — your corrections are remembered per piece
 - **Transport**: play/pause, seek, playback speed 25–150 % without pitch change, volume
+- **Wait mode**: the piece stops at the next note (or chord) and goes on when you play it; choose left, right or both hands. No scoring, no fail state. Needs a MIDI keyboard input
 - **Grid**: bar lines and beat lines (metre is read from the MIDI itself), octave boundaries, black-key columns — each one optional
 - **Lead-in** before the first note, so the piece does not start point-blank
 - **Piece library**: loaded files are stored on the device and switch with one tap
@@ -91,6 +92,14 @@ Replace `index.html` with the new version — that is enough: the cache strategy
 Bump `VERSION` in `sw.js` only when `sw.js` itself, the manifest or the icons change: those live in the pre-cached `ASSETS` list and refresh together with the cache version.
 
 GitHub Pages serves static files with `Cache-Control: max-age=600`, so a fresh version sometimes takes a second visit to arrive — just open the app again.
+
+## Tests
+
+The wait-mode matching logic is a pure function with tests that need only Node:
+
+```
+node --test tests/*.test.js
+```
 
 ## License
 
