@@ -195,6 +195,17 @@
     color: var(--ivory);
     cursor: pointer;
   }
+  .midi-select {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 10px;
+    font-size: 14px;
+    color: var(--ivory);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+  }
+  .midi-select option { color: #1a1408; }
   .grid-row input { width: 20px; height: 20px; accent-color: var(--gold); flex-shrink: 0; }
 
   /* Все кнопки — не меньше 44px по высоте: палец, не мышь */
@@ -743,6 +754,13 @@
         <div id="handsRows"></div>
         <p class="hands-title panel-gap" id="gridTitle">Сетка</p>
         <div id="gridRows"></div>
+        <p class="hands-title panel-gap" id="midiTitle">MIDI-клавиатура</p>
+        <p class="hands-hint" id="midiStatus"></p>
+        <select class="midi-select" id="midiSelect" aria-label="MIDI-клавиатура" hidden></select>
+        <div class="panel-foot">
+          <button class="btn btn-ghost" id="midiConnectBtn" type="button">Подключить</button>
+        </div>
+        <p class="hands-hint" id="midiHint"></p>
         <p class="hands-title panel-gap">Язык · Language</p>
         <div class="hand-row">
           <div class="hand-info"><span class="hand-name" id="langName">Язык интерфейса</span></div>
@@ -857,6 +875,8 @@ var HAND_COLORS = {
   left: { base: COLORS.silverBlue, bright: COLORS.silverBlueBright }
 };
 
+var LIVE_COLOR = { base: '#6FB58C', bright: '#9AD8B3' };
+
 var STORE_KEY = 'falling-notes:v2';
 
 /* =========================================================
@@ -947,6 +967,16 @@ var STR = {
     reason_unknown: 'причина неизвестна',
     quota: 'Не хватило места в памяти устройства. Уберите из списка лишние пьесы — и попробуйте снова.',
     restored_name: 'Восстановленный файл',
+    midi_title: 'MIDI-клавиатура',
+    midi_connect: 'Подключить',
+    midi_pick: 'Выбор MIDI-устройства',
+    midi_none: 'Не выбрано',
+    midi_unavailable: 'Web MIDI недоступен в этом браузере. Откройте приложение в Chrome или Edge на компьютере или Android. Safari на iPhone и iPad MIDI не поддерживает.',
+    midi_denied: 'Доступ к MIDI не разрешён. Разрешите его в настройках сайта и нажмите «Подключить» ещё раз.',
+    midi_no_devices: 'Устройств не найдено. Подключите клавиатуру по USB или Bluetooth.',
+    midi_connected: 'Подключено: {name}',
+    midi_choose: 'Выберите устройство в списке.',
+    midi_hint_android: 'Android и Bluetooth: сначала соедините клавиатуру в бесплатном приложении-мосте, например MIDI BLE Connect, затем нажмите «Подключить».',
     m_screen: 'экран',
     m_window: 'окно',
     m_canvas: 'холст',
@@ -1031,6 +1061,16 @@ var STR = {
     reason_unknown: 'reason unknown',
     quota: 'Not enough space in the device storage. Remove some pieces from the list — and try again.',
     restored_name: 'Restored file',
+    midi_title: 'MIDI keyboard',
+    midi_connect: 'Connect',
+    midi_pick: 'Choose a MIDI device',
+    midi_none: 'Not selected',
+    midi_unavailable: 'Web MIDI is not available in this browser. Open the app in Chrome or Edge on a computer or Android. Safari on iPhone and iPad does not support MIDI.',
+    midi_denied: 'MIDI access was not allowed. Allow it in the site settings and press Connect again.',
+    midi_no_devices: 'No devices found. Connect the keyboard over USB or Bluetooth.',
+    midi_connected: 'Connected: {name}',
+    midi_choose: 'Pick a device from the list.',
+    midi_hint_android: 'Android over Bluetooth: first pair the keyboard in a free bridge app such as MIDI BLE Connect, then press Connect.',
     m_screen: 'screen',
     m_window: 'window',
     m_canvas: 'canvas',
@@ -1096,6 +1136,7 @@ var state = {
   loopToken: 0        // чтобы пауза-и-старт внутри одного кадра не плодили циклы
 };
 var seekDragging = false;
+var liveKeys = {};   // pitch -> true, пока клавиша на MIDI-клавиатуре зажата или держится педалью
 var seekResumeAfter = false;
 var audioCtx = null;
 var masterGain = null;
@@ -1813,6 +1854,8 @@ function render(currentTime) {
     drawNoteBar(ctx, k.x + 1, k.width - 2, drawTop, drawBottom, col.base, isActive);
   }
 
+  for (var lp in liveKeys) activeMap[lp] = LIVE_COLOR;
+
   drawHitLine(ctx, hitLineY, cssWidth);
   drawKeyboard(ctx, layoutInfo, state.minPitch, state.maxPitch, hitLineY, keyboardHeight, activeMap);
 }
@@ -1970,6 +2013,156 @@ function playNote(pitch, velocity, durationSec) {
     } catch (e) { /* уже отключено */ }
   };
 }
+
+/* =========================================================
+   5b. MIDI-вход (Web MIDI)
+   ========================================================= */
+var MIDI_DEVICE_KEY = 'falling-notes:midi-device';
+var LIVE_HOLD_SEC = 1.2;
+var LIVE_PEDAL_HOLD_SEC = 4;
+var midiAccess = null;
+var midiInput = null;
+var midiError = '';
+var sustainDown = false;
+var heldKeys = {};
+var sustainedKeys = {};
+
+function midiSupported() {
+  return !!(navigator && typeof navigator.requestMIDIAccess === 'function');
+}
+
+function redrawLive() {
+  if (state.fileLoaded) render(getCurrentTime());
+}
+
+/* Общий обработчик байтов MIDI: сюда же приходят данные не только из Web MIDI */
+function handleMidiBytes(d) {
+  if (!d || d.length < 2) return;
+  var cmd = d[0] & 0xF0;
+  var v = d.length > 2 ? d[2] : 0;
+  if (cmd === 0x90 && v > 0) liveNoteOn(d[1], v);
+  else if (cmd === 0x80 || cmd === 0x90) liveNoteOff(d[1]);
+  else if (cmd === 0xB0 && d[1] === 64) setSustain(v >= 64);
+}
+
+function liveNoteOn(pitch, velocity) {
+  ensureAudio();
+  playNote(pitch, velocity, sustainDown ? LIVE_PEDAL_HOLD_SEC : LIVE_HOLD_SEC);
+  heldKeys[pitch] = true;
+  delete sustainedKeys[pitch];
+  liveKeys[pitch] = true;
+  if (typeof waitOnPitch === 'function') waitOnPitch(pitch);
+  redrawLive();
+}
+
+function liveNoteOff(pitch) {
+  delete heldKeys[pitch];
+  if (sustainDown) sustainedKeys[pitch] = true;
+  else delete liveKeys[pitch];
+  redrawLive();
+}
+
+function setSustain(down) {
+  sustainDown = down;
+  if (!down) {
+    for (var p in sustainedKeys) delete liveKeys[p];
+    sustainedKeys = {};
+    redrawLive();
+  }
+}
+
+function clearLiveKeys() {
+  liveKeys = {};
+  heldKeys = {};
+  sustainedKeys = {};
+  sustainDown = false;
+  redrawLive();
+}
+
+function midiInputList() {
+  var list = [];
+  if (!midiAccess) return list;
+  midiAccess.inputs.forEach(function (inp) { list.push(inp); });
+  return list;
+}
+
+function selectMidiInput(inp) {
+  if (midiInput !== inp) {
+    if (midiInput) midiInput.onmidimessage = null;
+    clearLiveKeys();
+  }
+  midiInput = inp || null;
+  if (midiInput) midiInput.onmidimessage = function (e) { handleMidiBytes(e.data); };
+  try {
+    if (midiInput) localStorage.setItem(MIDI_DEVICE_KEY, midiInput.id);
+  } catch (e) { /* без памяти — выберем заново */ }
+  refreshMidiStatus();
+}
+
+function refreshMidiInputs() {
+  var sel = document.getElementById('midiSelect');
+  var list = midiInputList();
+  var wanted = midiInput && list.indexOf(midiInput) >= 0 ? midiInput : null;
+  if (!wanted) {
+    var saved = '';
+    try { saved = localStorage.getItem(MIDI_DEVICE_KEY) || ''; } catch (e) { /* нет памяти */ }
+    list.forEach(function (inp) { if (inp.id === saved && inp.state !== 'disconnected') wanted = inp; });
+    if (!wanted) list.forEach(function (inp) { if (!wanted && inp.state !== 'disconnected') wanted = inp; });
+  }
+  if (midiInput && midiInput !== wanted) midiInput.onmidimessage = null;
+  sel.innerHTML = '';
+  var none = document.createElement('option');
+  none.value = '';
+  none.textContent = tr('midi_none');
+  sel.appendChild(none);
+  list.forEach(function (inp) {
+    var o = document.createElement('option');
+    o.value = inp.id;
+    o.textContent = inp.name || inp.id;
+    sel.appendChild(o);
+  });
+  selectMidiInput(wanted);
+  sel.value = wanted ? wanted.id : '';
+}
+
+function refreshMidiStatus() {
+  var statusEl = document.getElementById('midiStatus');
+  var sel = document.getElementById('midiSelect');
+  var btn = document.getElementById('midiConnectBtn');
+  if (!statusEl) return;
+  var text;
+  if (!midiSupported()) text = tr('midi_unavailable');
+  else if (midiError) text = tr(midiError);
+  else if (!midiAccess) text = '';
+  else if (midiInput) text = trf('midi_connected', midiInput.name || midiInput.id);
+  else text = tr(midiInputList().length ? 'midi_choose' : 'midi_no_devices');
+  statusEl.textContent = text;
+  statusEl.hidden = !text;
+  sel.hidden = !midiAccess;
+  btn.hidden = !!midiAccess;
+  btn.disabled = !midiSupported();
+}
+
+function connectMidi() {
+  if (!midiSupported()) { refreshMidiStatus(); return; }
+  midiError = '';
+  navigator.requestMIDIAccess().then(function (access) {
+    midiAccess = access;
+    access.onstatechange = function () { refreshMidiInputs(); };
+    refreshMidiInputs();
+  }, function () {
+    midiError = 'midi_denied';
+    refreshMidiStatus();
+  });
+}
+
+document.getElementById('midiConnectBtn').addEventListener('click', connectMidi);
+document.getElementById('midiSelect').addEventListener('change', function (e) {
+  var id = e.target.value;
+  var found = null;
+  midiInputList().forEach(function (inp) { if (inp.id === id) found = inp; });
+  selectMidiInput(found);
+});
 
 /* =========================================================
    6. Плеер / транспорт
@@ -3173,6 +3366,11 @@ function applyStaticTexts() {
   setAttr('handsClose', 'aria-label', 'close');
   setText('handsTitleMain', 'hands_title');
   setText('gridTitle', 'grid_title');
+  setText('midiTitle', 'midi_title');
+  setText('midiConnectBtn', 'midi_connect');
+  setText('midiHint', 'midi_hint_android');
+  setAttr('midiSelect', 'aria-label', 'midi_pick');
+  refreshMidiStatus();
   setText('langName', 'lang_name');
   setAttr('appVersion', 'title', 'version_btn_title');
   var credit = document.getElementById('builtInCredit');
